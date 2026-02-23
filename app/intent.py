@@ -20,5 +20,7 @@ class IntentDetector:
         # 🔹 habit detection
         if re.search(r"\b(wake|sleep|study|exercise|workout|eat)\b", text):
             return "save_habit"
+        if "remind" in text or "reminder" in text:
+            return "set_reminder"
 
         return "general_chat"

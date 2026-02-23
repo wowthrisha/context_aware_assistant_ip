@@ -1,24 +1,14 @@
+from transformers import AutoTokenizer, AutoModelForCausalLM
+import torch
+
 class LLMEngine:
     def __init__(self):
-        pass
+        model="nvidia/personaplex-7b-v1"
+        self.tokenizer=AutoTokenizer.from_pretrained(model)
+        self.model=AutoModelForCausalLM.from_pretrained(model,device_map="auto")
 
-    def generate_response(self, user_input, intent, context=None):
-
-        if intent == "set_reminder":
-            return "Sure, I’ll set that reminder for you."
-
-        elif intent == "save_habit":
-            return "Got it. I’ll remember that habit."
-
-        elif intent == "save_preference":
-            return "Okay, I’ve saved your preference."
-
-        elif intent == "recall_memory":
-            if context:
-                return f"Here’s what I remember: {context}"
-            else:
-                return "I don’t have anything stored about that yet."
-
-        else:
-            return "Alright, I’m here to help."
-        
+    def generate_response(self,user_input,intent,context=None):
+        prompt=f"Memory:{context}\nUser:{user_input}\nAssistant:"
+        inputs=self.tokenizer(prompt,return_tensors="pt").to(self.model.device)
+        out=self.model.generate(**inputs,max_new_tokens=120)
+        return self.tokenizer.decode(out[0],skip_special_tokens=True)
