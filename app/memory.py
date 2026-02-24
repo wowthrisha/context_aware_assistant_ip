@@ -1,6 +1,6 @@
 import chromadb
 from sentence_transformers import SentenceTransformer
-from config import *
+from .config import *
 
 class MemoryManager:
     def __init__(self):
