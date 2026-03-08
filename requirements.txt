@@ -1,6 +1,8 @@
-chromadb==1.5.1
-sentence-transformers==5.2.0
-torch>=2.2.0
-transformers>=4.41.0
-tqdm
-numpy
+anthropic
+fastapi
+uvicorn[standard]
+apscheduler
+chromadb
+sentence-transformers
+python-dotenv
+pydantic
