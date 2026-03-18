@@ -60,7 +60,7 @@ def run_assistant(msg: str, user_id: str = "default") -> dict:
 
         clean = extract_preference(msg, sentiment="positive")
 
-        saved = memory.save_preference(user_id, clean, sentiment="positive")
+        saved = memory.save_preference(clean, sentiment="positive")
         memory_saved = {
             "type": "preference",
             "text": clean,
@@ -91,7 +91,7 @@ def run_assistant(msg: str, user_id: str = "default") -> dict:
 
         clean, time_hint = extract_habit(msg)
 
-        saved = memory.save_habit(user_id, clean, time_hint=time_hint)
+        saved = memory.save_habit(clean, time_hint=time_hint)
 
         memory_saved = {
             "type": "habit",
@@ -134,7 +134,7 @@ def run_assistant(msg: str, user_id: str = "default") -> dict:
     # ── Habit suggestions ─────────────────────────
     if not proactive_suggestion:
 
-        habits = memory.retrieve_habits(user_id)
+        habits = memory.retrieve_habits()
         
         suggestions = suggest_from_habits(habits)
 

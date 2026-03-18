@@ -1,0 +1,10 @@
+[2026-03-18 21:54:32.060857] EMIT to ridhu: {'type': 'reminder', 'reminder_id': 'd4a42644-0275-4eb4-931d-1a79f7d0e2d3', 'message': 'to test sse from python', 'trigger_at': '2026-03-18T16:24:32.059779'}
+[2026-03-18 21:54:32.073974] EMIT to ridhu: {'type': 'reminder', 'reminder_id': 'bf2f31bf-5a24-4f5a-b844-4b7365284f53', 'message': 'to test sse from python', 'trigger_at': '2026-03-18T16:24:32.073101'}
+[2026-03-18 21:54:32.118335] EMIT to ridhu: {'type': 'reminder', 'reminder_id': '84d6223a-dd9c-4ab9-b068-95affe58e0e5', 'message': 'to test sse from python', 'trigger_at': '2026-03-18T16:24:32.117914'}
+[2026-03-18 21:56:41.721981] EMIT to ridhu: {'type': 'reminder', 'reminder_id': 'fa942a2a-ff5a-46ca-bf1e-24ac83b47af3', 'message': 'make hot chocolate', 'trigger_at': '2026-03-18T16:26:41.721551'}
+[2026-03-18 21:57:25.441574] EMIT to ridhu: {'type': 'reminder', 'reminder_id': 'cd250006-e091-41b7-bc76-17a9be6d3b35', 'message': 'submit my doc in classroom in 15 secs', 'trigger_at': '2026-03-18T16:27:25.441207'}
+[2026-03-18 22:52:08.793538] EMIT to ridhu: {'type': 'reminder', 'reminder_id': '0be784b0-b4e1-4ac5-a39a-5246f56b5809', 'message': 'Hii I love exercising. Can you in 10 sec to start walking', 'trigger_at': '2026-03-18T17:22:08.792834'}
+[2026-03-18 22:58:38.869633] EMIT to ridhu: {'type': 'reminder', 'reminder_id': '27e91039-73e1-4cba-b341-8fa6fbd142d1', 'message': 'send email to principal', 'trigger_at': '2026-03-18T17:28:38.868369'}
+[2026-03-18 23:07:40.745771] EMIT to ridhu: {'type': 'reminder', 'reminder_id': '6f840caa-2a80-4497-aa4b-c11e9ab9cee8', 'message': 'make coffee', 'trigger_at': '2026-03-18T17:37:40.744616'}
+[2026-03-18 23:31:13.772963] EMIT to ridhu: {'type': 'reminder', 'reminder_id': '0ba87b31-d181-40f4-9783-c4848ceff0de', 'message': 'drink water in 10 mins', 'trigger_at': '2026-03-18T18:01:13.770914'}
+[2026-03-18 23:54:18.452663] EMIT to ridhu: {'type': 'reminder', 'reminder_id': '61abf6a0-2207-4ece-81c3-745bdabb0cb1', 'message': 'eat chocolate', 'trigger_at': '2026-03-18T18:24:18.452252'}

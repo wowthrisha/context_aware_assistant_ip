@@ -53,14 +53,23 @@ _scheduler = BackgroundScheduler(
         "max_instances": 1,
         "misfire_grace_time": 3600,
     },
-    timezone="UTC",
 )
 
 # ── Reminder callback ─────────────────────────────────────────────────────────
 
-def _reminder_callback(reminder_id: str, message: str):
-    logger.info("🔔 REMINDER FIRED [%s]: %s", reminder_id, message)
+def _reminder_callback(reminder_id: str, message: str, user_id: str):
+    logger.info("🔔 REMINDER FIRED [%s] for user %s: %s", reminder_id, user_id, message)
     mark_fired(reminder_id)
+
+    # Emit SSE notification
+    from .sse import sse_manager
+    payload = {
+        "type": "reminder",
+        "reminder_id": reminder_id,
+        "message": message,
+        "trigger_at": datetime.utcnow().isoformat()
+    }
+    sse_manager.emit(user_id, payload)
 
 # ── Scheduler event logging ───────────────────────────────────────────────────
 
@@ -109,7 +118,7 @@ def _reload_pending_reminders():
             _reminder_callback,
             trigger="date",
             run_date=trigger_at,
-            args=[jid, rem["message"]],
+            args=[jid, rem["message"], rem["user_id"]],
             id=jid,
             replace_existing=True,
         )
@@ -158,7 +167,7 @@ class ActionRouter:
             _reminder_callback,
             trigger="date",
             run_date=trigger_at,
-            args=[reminder_id, clean_msg],
+            args=[reminder_id, clean_msg, user_id],
             id=reminder_id,
             replace_existing=True,
         )
@@ -230,4 +239,3 @@ class ActionRouter:
     def get_all_reminders(self, user_id: str, status: Optional[str] = None):
 
         return get_all_reminders_db(user_id=user_id, status=status)
-

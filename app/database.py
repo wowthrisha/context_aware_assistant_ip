@@ -99,20 +99,35 @@ def mark_cancelled(reminder_id: str) -> bool:
 
 # ── READ ─────────────────────────────────────
 
-def get_all_reminders_db(user_id: str, status: Optional[str] = None):
+def get_reminder_by_id(reminder_id: str):
     conn = _conn()
     try:
-        if status:
-            rows = conn.execute(
-                "SELECT * FROM reminders WHERE user_id=? AND status=? ORDER BY trigger_at",
-                (user_id, status),
-            ).fetchall()
-        else:
-            rows = conn.execute(
-                "SELECT * FROM reminders WHERE user_id=? ORDER BY trigger_at",
-                (user_id,),
-            ).fetchall()
+        row = conn.execute("SELECT * FROM reminders WHERE id=?", (reminder_id,)).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
 
+
+def get_all_reminders_db(user_id: Optional[str] = None, status: Optional[str] = None):
+    conn = _conn()
+    try:
+        query = "SELECT * FROM reminders"
+        params = []
+        conditions = []
+        
+        if user_id:
+            conditions.append("user_id=?")
+            params.append(user_id)
+        if status:
+            conditions.append("status=?")
+            params.append(status)
+            
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
+        
+        query += " ORDER BY trigger_at"
+        
+        rows = conn.execute(query, params).fetchall()
         return [dict(r) for r in rows]
     finally:
         conn.close()
@@ -124,9 +139,7 @@ def get_pending_reminders_db():
         now = datetime.utcnow().isoformat()
 
         rows = conn.execute(
-            """SELECT * FROM reminders
-            WHERE status='pending' AND trigger_at > ?""",
-            (now,),
+            """SELECT * FROM reminders WHERE status='pending'"""
         ).fetchall()
 
         return [dict(r) for r in rows]
