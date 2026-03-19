@@ -29,33 +29,119 @@ const playBeep = () => {
   } catch (e) {}
 };
 
+//voice
+const playMicOn = () => {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(600, ctx.currentTime);
+
+    gain.gain.setValueAtTime(0.15, ctx.currentTime);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start();
+    osc.stop(ctx.currentTime + 0.15);
+  } catch {}
+};
+
+const playMicOff = () => {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(300, ctx.currentTime);
+
+    gain.gain.setValueAtTime(0.15, ctx.currentTime);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start();
+    osc.stop(ctx.currentTime + 0.2);
+  } catch {}
+};
+
 // --- Components ---
-function Bubble({ role, text }) {
+function Bubble({ role, text, selectedVoice }) {
   const isUser = role === "user";
+  const [speaking, setSpeaking] = useState(false);
+
+  const speak = () => {
+    
+    if (speaking) {
+      window.speechSynthesis.cancel();
+      setSpeaking(false);
+      return;
+    }
+    const cleaned = text.replace(/[\u{1F000}-\u{1FFFF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{FE00}-\u{FEFF}]|[\u{1F900}-\u{1F9FF}]|[\u{1FA00}-\u{1FA6F}]/gu, "").trim();
+const utterance = new SpeechSynthesisUtterance(cleaned);
+    if (selectedVoice) utterance.voice = selectedVoice;
+    utterance.onend = () => setSpeaking(false);
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(utterance);
+    setSpeaking(true);
+  };
+
   return (
     <div style={{
       display: "flex",
       justifyContent: isUser ? "flex-end" : "flex-start",
+      alignItems: "flex-start",
+      gap: "8px",
       marginBottom: "16px",
-      animation: "fadeSlide 0.3s ease-out"
+      animation: "fadeSlide 0.3s ease-out",
+      flexDirection: isUser ? "row-reverse" : "row"
     }}>
+      {/* Avatar */}
       <div style={{
-        background: isUser ? "rgba(37, 99, 235, 0.4)" : "rgba(22, 27, 34, 0.6)",
-        backdropFilter: "blur(4px)",
-        border: "1px solid rgba(255,255,255,0.1)",
-        borderRadius: "12px",
-        padding: "12px 16px",
-        maxWidth: "85%",
-        fontSize: "0.85rem",
-        color: "#f0f6fc",
-        fontFamily: "'Inter', sans-serif"
+        width: "28px", height: "28px", borderRadius: "50%", flexShrink: 0,
+        background: isUser ? "rgba(37,99,235,0.3)" : "rgba(99,102,241,0.3)",
+        border: `1px solid ${isUser ? "rgba(37,99,235,0.5)" : "rgba(99,102,241,0.5)"}`,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        fontSize: "13px", marginTop: "2px"
       }}>
-        {text}
+        {isUser ? "👤" : "🤖"}
+      </div>
+
+      {/* Bubble + listen button */}
+      <div style={{ display: "flex", flexDirection: "column", alignItems: isUser ? "flex-end" : "flex-start", maxWidth: "80%" }}>
+        <div style={{
+          background: isUser ? "rgba(37, 99, 235, 0.4)" : "rgba(22, 27, 34, 0.6)",
+          backdropFilter: "blur(4px)",
+          border: "1px solid rgba(255,255,255,0.1)",
+          borderRadius: isUser ? "12px 2px 12px 12px" : "2px 12px 12px 12px",
+          padding: "12px 16px",
+          fontSize: "0.85rem",
+          color: "#f0f6fc",
+          fontFamily: "'Inter', sans-serif"
+        }}>
+          {text}
+        </div>
+        {!isUser && (
+          <button
+            onClick={speak}
+            title={speaking ? "Stop" : "Read aloud"}
+            style={{
+              marginTop: "4px", background: "none", border: "none",
+              cursor: "pointer", fontSize: "13px",
+              color: speaking ? "#3b82f6" : "#484f58",
+              padding: "2px 6px", borderRadius: "4px", transition: "color 0.2s"
+            }}
+          >
+            {speaking ? "⏹ stop" : "🔈 listen"}
+          </button>
+        )}
       </div>
     </div>
   );
 }
-
 function ReminderCard({ reminder, onCancel }) {
   const isFired = reminder.status === "fired";
   const isCancelled = reminder.status === "cancelled";
@@ -67,14 +153,16 @@ function ReminderCard({ reminder, onCancel }) {
   const relativeTime = formatDistanceToNow(triggerDate, { addSuffix: true });
 
   return (
-    <div style={{
-      display: "flex",
-      alignItems: "center",
-      padding: "16px 20px",
-      borderBottom: "1px solid rgba(255,255,255,0.05)",
-      gap: "20px",
-      transition: "background 0.2s"
-    }}>
+    <div
+  onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.03)"}
+  onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+  style={{
+    display: "flex", alignItems: "center", padding: "16px 20px",
+    borderBottom: "1px solid rgba(255,255,255,0.05)",
+    borderLeft: `3px solid ${isFired ? "#238636" : isCancelled ? "#da3633" : "#3b82f6"}`,
+    gap: "20px", transition: "background 0.2s", background: "transparent"
+  }}
+>
       <div style={{
         width: "32px",
         height: "32px",
@@ -124,9 +212,17 @@ export default function App() {
   const [memoryData, setMemoryData] = useState({ preference: [], habit: [], general: [] });
   const [toast, setToast] = useState(null);
   const [userId, setUserId] = useState("ridhu");
+  const [listening, setListening] = useState(false);
+  const [selectedVoice, setSelectedVoice] = useState(null);
+  const [voices, setVoices] = useState([]);
   const chatRef = useRef(null);
   const sseRef = useRef(null);
-
+  //voice
+  const recognitionRef = useRef(null);
+  const voiceStatusRef = useRef("idle");
+const [voiceStatus, setVoiceStatus] = useState("idle");
+useEffect(() => { voiceStatusRef.current = voiceStatus; }, [voiceStatus]);
+const sendVoiceRef = useRef(null);
   // --- Notification System ---
   const triggerNotification = (msg) => {
     // 1. In-App Premium Toast
@@ -192,24 +288,66 @@ export default function App() {
   };
 
   const send = async () => {
-    if (!input.trim() || loading) return;
-    setMessages(prev => [...prev, { role: "user", text: input }]);
-    setLoading(true);
-    setInput("");
-    try {
-      const r = await fetch(`${API}/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: input })
-      });
-      const data = await r.json();
-      setMessages(prev => [...prev, { role: "assistant", text: data.reply }]);
-      if (data.system?.reminder_id) fetchReminders();
-      if (data.memory_saved) fetchMemory();
-    } catch { setBackendOnline(false); }
-    setLoading(false);
-  };
+  if (!input.trim() || loading) return;
 
+  setMessages(prev => [...prev, { role: "user", text: input }]);
+  setLoading(true);
+  setInput("");
+
+  try {
+    const r = await fetch(`${API}/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: input })
+    });
+
+    const data = await r.json();
+
+    setMessages(prev => [...prev, { role: "assistant", text: data.reply }]);
+
+    // 🔊 ADD THIS (voice reply for text too)
+    setVoiceStatus("idle");
+
+    if (data.system?.reminder_id) fetchReminders();
+    if (data.memory_saved) fetchMemory();
+
+  } catch {
+    setBackendOnline(false);
+  }
+
+  setLoading(false);
+};
+
+  //voice
+  const sendVoice = async (voiceText) => {
+  console.log("🚀 sendVoice CALLED with:", voiceText); // ← confirm this fires
+  
+  setMessages(prev => [...prev, { role: "user", text: voiceText }]);
+  setLoading(true);
+
+  try {
+    const r = await fetch(`${API}/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: voiceText })
+    });
+    const data = await r.json();
+    console.log("✅ Got reply:", data.reply);
+    setMessages(prev => [...prev, { role: "assistant", text: data.reply }]);
+    const cleaned = data.reply.replace(/[\u{1F000}-\u{1FFFF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{FE00}-\u{FEFF}]|[\u{1F900}-\u{1F9FF}]|[\u{1FA00}-\u{1FA6F}]/gu, "").trim();
+const speech = new SpeechSynthesisUtterance(cleaned);
+if (selectedVoice) speech.voice = selectedVoice;
+window.speechSynthesis.speak(speech);
+    if (data.system?.reminder_id) fetchReminders();
+  } catch(e) {
+    console.error("❌ fetch failed:", e);
+    setBackendOnline(false);
+  }
+  setLoading(false);
+};
+
+sendVoiceRef.current = sendVoice;
+//sendVoiceRef.current = sendVoice;
   useEffect(() => {
     fetchReminders();
     const interval = setInterval(fetchReminders, 5000);
@@ -223,10 +361,69 @@ export default function App() {
     fired: reminders.filter(r => r.status === "fired").length,
     cancelled: reminders.filter(r => r.status === "cancelled").length
   };
+  
+  //voice
+  useEffect(() => {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) return;
+
+  const recognition = new SpeechRecognition();
+  recognition.continuous = false;
+  recognition.interimResults = true;
+  recognition.lang = "en-US";
+
+  recognition.onstart = () => { setListening(true); setVoiceStatus("listening"); };
+  recognition.onend = () => {
+    setListening(false);
+    if (voiceStatusRef.current !== "speaking" && voiceStatusRef.current !== "processing") {
+      setVoiceStatus("idle");
+    }
+  };
+
+  recognition.onresult = (event) => {
+  const last = event.results[event.results.length - 1];
+
+if (!last.isFinal) {
+  // build full interim from ALL results so far
+  let interim = "";
+  for (let i = 0; i < event.results.length; i++) {
+    interim += event.results[i][0].transcript;
+  }
+  setInput(interim);
+  return;
+}
+
+const finalText = last[0].transcript.trim();
+  console.log("📢 Final:", finalText);
+  console.log("📢 Ref:", sendVoiceRef.current);
+  sendVoiceRef.current(finalText);
+  setInput("");
+};
+
+  recognition.onerror = (e) => {
+    if (e.error === "no-speech" || e.error === "aborted") return;
+    console.error("Speech error:", e.error);
+    setVoiceStatus("idle");
+  };
+
+  recognitionRef.current = recognition;
+}, []);
+
+useEffect(() => {
+  const loadVoices = () => {
+    const v = window.speechSynthesis.getVoices();
+    if (v.length) setVoices(v);
+  };
+  loadVoices();
+  window.speechSynthesis.onvoiceschanged = loadVoices;
+}, []);
 
   return (
     <div style={{
-      width: "100vw", height: "100vh", background: "#0d1117", color: "#c9d1d9",
+      width: "100vw", height: "100vh", background: "linear-gradient(-45deg, #0d1117, #0f1923, #0d1117, #111827)",
+backgroundSize: "400% 400%",
+animation: "gradientShift 15s ease infinite",
+color: "#c9d1d9",
       fontFamily: "'Inter', sans-serif", display: "flex", flexDirection: "column",
       padding: "20px", boxSizing: "border-box", overflow: "hidden"
     }}>
@@ -238,6 +435,13 @@ export default function App() {
         ::-webkit-scrollbar { width: 8px; }
         ::-webkit-scrollbar-track { background: rgba(0,0,0,0.1); }
         ::-webkit-scrollbar-thumb { background: #30363d; borderRadius: 4px; }
+        @keyframes micPulse { 0% { box-shadow: 0 0 0 0 rgba(16,185,129,0.6); } 70% { box-shadow: 0 0 0 12px rgba(16,185,129,0); } 100% { box-shadow: 0 0 0 0 rgba(16,185,129,0); } }
+@keyframes gradientShift { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+@keyframes wave1 { 0%,100% { height: 4px; } 50% { height: 16px; } }
+@keyframes wave2 { 0%,100% { height: 8px; } 50% { height: 24px; } }
+@keyframes wave3 { 0%,100% { height: 6px; } 50% { height: 20px; } }
+@keyframes wave4 { 0%,100% { height: 10px; } 50% { height: 18px; } }
+@keyframes dots { 0%,20% { opacity:0; } 50% { opacity:1; } 100% { opacity:0; } }
       `}</style>
       
       {/* Premium Legible Toast */}
@@ -285,8 +489,27 @@ export default function App() {
           <span style={{ fontSize: "11px", fontWeight: 700, color: "#484f58", letterSpacing: "1px" }}>REMINDER SYSTEM V2</span>
         </div>
         <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-           <button onClick={() => { if(!memoryPanel) fetchMemory(); setMemoryPanel(!memoryPanel); }} style={{ background: "transparent", border: "none", color: "#8b949e", fontSize: "11px", fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: "8px", background: "rgba(255,255,255,0.03)", padding: "8px 16px", borderRadius: "8px" }}>🧠 MEMORY {memoryPanel ? "▼" : "▲"}</button>
-        </div>
+  <select
+    onChange={e => {
+      const v = voices.find(v => v.name === e.target.value);
+      setSelectedVoice(v || null);
+    }}
+    style={{
+      background: "rgba(255,255,255,0.03)", border: "1px solid #30363d",
+      color: "#8b949e", fontSize: "11px", fontWeight: 700,
+      padding: "8px 12px", borderRadius: "8px", cursor: "pointer", outline: "none"
+    }}
+  >
+    <option value="">🔊 Default Voice</option>
+    {voices
+      .filter(v => v.lang.startsWith("en"))
+      .map(v => (
+        <option key={v.name} value={v.name}>{v.name}</option>
+      ))
+    }
+  </select>
+  <button onClick={() => { if(!memoryPanel) fetchMemory(); setMemoryPanel(!memoryPanel); }} style={{ background: "transparent", border: "none", color: "#8b949e", fontSize: "11px", fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: "8px", background: "rgba(255,255,255,0.03)", padding: "8px 16px", borderRadius: "8px" }}>🧠 MEMORY {memoryPanel ? "▼" : "▲"}</button>
+</div>
       </div>
 
       <div style={{ fontSize: "11px", color: "#8b949e", display: "flex", gap: "10px", alignItems: "center", marginBottom: "20px", padding: "0 10px" }}>
@@ -314,20 +537,95 @@ export default function App() {
           <div style={{ flex: 1, background: "rgba(13, 17, 23, 0.3)", border: "1px solid rgba(48, 54, 61, 0.5)", borderRadius: "12px", display: "flex", flexDirection: "column", overflow: "hidden" }}>
              <div style={{ padding: "12px 16px", background: "rgba(255,255,255,0.02)", borderBottom: "1px solid rgba(48, 54, 61, 0.5)", fontSize: "10px", fontWeight: 700, color: "#484f58", letterSpacing: "1px" }}>CHAT INTERFACE</div>
              <div style={{ flex: 1, overflowY: "auto", padding: "20px" }} ref={chatRef}>
-               {messages.map((m, i) => <Bubble key={i} role={m.role} text={m.text} />)}
-               {loading && <div style={{ fontSize: "11px", color: "#8b949e", fontStyle: "italic" }}>Assistant is analyzing...</div>}
+               {messages.map((m, i) => <Bubble key={i} role={m.role} text={m.text} selectedVoice={selectedVoice} />)}
+               {loading && (
+  <div style={{ display: "flex", marginBottom: "16px" }}>
+    <div style={{ background: "rgba(22,27,34,0.6)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "12px", padding: "12px 16px", display: "flex", gap: "5px", alignItems: "center" }}>
+      {[0, 0.2, 0.4].map((delay, i) => (
+        <div key={i} style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#8b949e", animation: "dots 1.2s ease-in-out infinite", animationDelay: `${delay}s` }} />
+      ))}
+    </div>
+  </div>
+)}
              </div>
              <div style={{ padding: "16px", borderTop: "1px solid rgba(48, 54, 61, 0.5)", background: "rgba(0,0,0,0.2)" }}>
                <div style={{ display: "flex", gap: "10px" }}>
-                 <input 
-                  value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === "Enter" && send()}
-                  placeholder='"I love coffee" or "Remind me..."'
-                  style={{ flex: 1, background: "rgba(255,255,255,0.02)", border: "1px solid #30363d", borderRadius: "8px", padding: "10px 14px", color: "#fff", fontSize: "13px", outline: "none" }}
-                 />
-                 <button onClick={send} style={{ background: "#2563eb", color: "#fff", border: "none", borderRadius: "8px", padding: "0 16px", fontWeight: 600, fontSize: "13px", cursor: "pointer" }}>Send →</button>
-               </div>
+  
+  <input
+    value={input}
+    onChange={e => setInput(e.target.value)}
+    onKeyDown={e => e.key === "Enter" && send()}
+    placeholder='"I love coffee" or "Remind me..."'
+    style={{
+      flex: 1,
+      background: "rgba(255,255,255,0.02)",
+      border: "1px solid #30363d",
+      borderRadius: "8px",
+      padding: "10px 14px",
+      color: "#fff",
+      fontSize: "13px",
+      outline: "none"
+    }}
+  />
+
+  {/* 🎤 MIC BUTTON */}
+ {/* 🎤 MIC BUTTON */}
+<div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px" }}>
+  {voiceStatus === "speaking" && (
+    <div style={{ display: "flex", alignItems: "center", gap: "3px", height: "24px" }}>
+      {[
+        { anim: "wave1 0.6s ease-in-out infinite" },
+        { anim: "wave2 0.6s ease-in-out infinite 0.1s" },
+        { anim: "wave3 0.6s ease-in-out infinite 0.2s" },
+        { anim: "wave4 0.6s ease-in-out infinite 0.3s" },
+        { anim: "wave1 0.6s ease-in-out infinite 0.15s" },
+      ].map((w, i) => (
+        <div key={i} style={{ width: "3px", borderRadius: "2px", background: "#3b82f6", animation: w.anim }} />
+      ))}
+    </div>
+  )}
+  <button
+    onClick={() => {
+      window.speechSynthesis.cancel();
+      setVoiceStatus("idle");
+      try { recognitionRef.current?.start(); } catch {}
+    }}
+    style={{
+      background: listening ? "#ef4444" : voiceStatus === "processing" ? "#f59e0b" : "#10b981",
+      color: "#fff", border: "none", borderRadius: "50%",
+      width: "40px", height: "40px", fontSize: "16px", cursor: "pointer",
+      animation: listening ? "micPulse 1.2s infinite" : "none",
+      transition: "background 0.3s"
+    }}
+  >
+    {voiceStatus === "processing" ? "⏳" : "🎤"}
+  </button>
+  <span style={{
+    fontSize: "8px", fontWeight: 700, letterSpacing: "0.5px",
+    color: voiceStatus === "listening" ? "#10b981" : voiceStatus === "processing" ? "#f59e0b" : voiceStatus === "speaking" ? "#3b82f6" : "#484f58",
+    textTransform: "uppercase"
+  }}>{voiceStatus}</span>
+</div>
+<button
+    onClick={send}
+    style={{
+      background: "#2563eb",
+      color: "#fff",
+      border: "none",
+      borderRadius: "8px",
+      padding: "0 16px",
+      fontWeight: 600,
+      fontSize: "13px",
+      cursor: "pointer"
+    }}
+  >
+    Send →
+  </button>
+
+</div>
              </div>
           </div>
+          
 
           {/* Stats Boxes from screenshot */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "10px" }}>
