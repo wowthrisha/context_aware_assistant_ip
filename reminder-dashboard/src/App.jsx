@@ -211,7 +211,7 @@ export default function App() {
   const [memoryPanel, setMemoryPanel] = useState(false);
   const [memoryData, setMemoryData] = useState({ preference: [], habit: [], general: [] });
   const [toast, setToast] = useState(null);
-  const [userId, setUserId] = useState("ridhu");
+  const [userId, setUserId] = useState(() => localStorage.getItem('userId') || "ridhu");
   const [listening, setListening] = useState(false);
   const [selectedVoice, setSelectedVoice] = useState(null);
   const [voices, setVoices] = useState([]);
@@ -223,6 +223,12 @@ export default function App() {
 const [voiceStatus, setVoiceStatus] = useState("idle");
 useEffect(() => { voiceStatusRef.current = voiceStatus; }, [voiceStatus]);
 const sendVoiceRef = useRef(null);
+  // --- Notification panel state ---
+  const [notifPanel, setNotifPanel]             = useState(false);
+  const [notifPrefs, setNotifPrefs]             = useState({ whatsapp: "", email: "", channels: ["sse"] });
+  const [notifSaving, setNotifSaving]           = useState(false);
+  const [notifTestResult, setNotifTestResult]   = useState(null);
+
   // --- Notification System ---
   const triggerNotification = (msg) => {
     // 1. In-App Premium Toast
@@ -267,7 +273,9 @@ const sendVoiceRef = useRef(null);
 
   const fetchReminders = async () => {
     try {
-      const r = await fetch(`${API}/reminders`);
+      const r = await fetch(`${API}/reminders`, {
+        headers: { "X-User-ID": userId }
+      });
       if (r.ok) {
         const data = await r.json();
         setReminders(data.reminders || []);
@@ -276,7 +284,10 @@ const sendVoiceRef = useRef(null);
   };
 
   const cancelReminder = async (id) => {
-    await fetch(`${API}/reminders/${id}`, { method: "DELETE" });
+    await fetch(`${API}/reminders/${id}`, { 
+      method: "DELETE",
+      headers: { "X-User-ID": userId }
+    });
     fetchReminders();
   };
 
@@ -285,6 +296,73 @@ const sendVoiceRef = useRef(null);
       const results = await Promise.all(["preference", "habit", "general"].map(t => fetch(`${API}/memory/${t}`).then(res => res.json())));
       setMemoryData({ preference: results[0].entries || [], habit: results[1].entries || [], general: results[2].entries || [] });
     } catch {}
+  };
+
+  const switchUser = (newUserId) => {
+    setUserId(newUserId);
+    localStorage.setItem('userId', newUserId);
+  };
+
+  const loadNotifPrefs = async () => {
+    try {
+      const res  = await fetch(`${API}/notification-prefs`, {
+        headers: { "X-User-ID": userId }
+      });
+      const data = await res.json();
+      if (data.prefs && Object.keys(data.prefs).length > 0) {
+        setNotifPrefs({
+          whatsapp: data.prefs.whatsapp || "",
+          email:    data.prefs.email    || "",
+          channels: (data.prefs.channels || "sse").split(",")
+        });
+      }
+    } catch (e) {
+      console.error("Failed to load notification prefs", e);
+    }
+  };
+
+  const saveNotifPrefs = async () => {
+    setNotifSaving(true);
+    try {
+      await fetch(`${API}/notification-prefs`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json", "X-User-ID": userId },
+        body:    JSON.stringify({
+          whatsapp: notifPrefs.whatsapp || null,
+          email:    notifPrefs.email    || null,
+          channels: notifPrefs.channels
+        })
+      });
+      setToast({ message: "Notification preferences saved.", id: Date.now() });
+      setTimeout(() => setToast(null), 5000);
+    } catch (e) {
+      setToast({ message: "Failed to save preferences.", id: Date.now() });
+      setTimeout(() => setToast(null), 5000);
+    } finally {
+      setNotifSaving(false);
+    }
+  };
+
+  const testNotification = async (channel) => {
+    setNotifTestResult(null);
+    try {
+      const res  = await fetch(`${API}/test-notification`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json", "X-User-ID": userId },
+        body:    JSON.stringify({
+          channel,
+          message: "Test from your Context Assistant dashboard."
+        })
+      });
+      const data = await res.json();
+      setNotifTestResult(
+        data.status === "dispatched"
+          ? "Test sent successfully."
+          : `Status: ${data.status}. ${data.hint || ""}`
+      );
+    } catch (e) {
+      setNotifTestResult("Test failed. Check console for details.");
+    }
   };
 
   const send = async () => {
@@ -297,7 +375,10 @@ const sendVoiceRef = useRef(null);
   try {
     const r = await fetch(`${API}/chat`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { 
+        "Content-Type": "application/json",
+        "X-User-ID": userId 
+      },
       body: JSON.stringify({ message: input })
     });
 
@@ -328,7 +409,10 @@ const sendVoiceRef = useRef(null);
   try {
     const r = await fetch(`${API}/chat`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { 
+        "Content-Type": "application/json",
+        "X-User-ID": userId 
+      },
       body: JSON.stringify({ message: voiceText })
     });
     const data = await r.json();
@@ -355,6 +439,8 @@ sendVoiceRef.current = sendVoice;
   }, []);
 
   useEffect(() => { chatRef.current?.scrollTo({ top: chatRef.current.scrollHeight, behavior: "smooth" }); }, [messages]);
+
+  useEffect(() => { if (notifPanel) loadNotifPrefs(); }, [notifPanel]);
 
   const stats = {
     pending: reminders.filter(r => r.status === "pending").length,
@@ -509,6 +595,16 @@ color: "#c9d1d9",
     }
   </select>
   <button onClick={() => { if(!memoryPanel) fetchMemory(); setMemoryPanel(!memoryPanel); }} style={{ background: "transparent", border: "none", color: "#8b949e", fontSize: "11px", fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: "8px", background: "rgba(255,255,255,0.03)", padding: "8px 16px", borderRadius: "8px" }}>🧠 MEMORY {memoryPanel ? "▼" : "▲"}</button>
+  <button
+    onClick={() => setNotifPanel(p => !p)}
+    style={{
+      background: notifPanel ? "#4f8ef7" : "rgba(255,255,255,0.03)",
+      border: "1px solid #4f8ef7",
+      color: notifPanel ? "#fff" : "#4f8ef7",
+      fontSize: "11px", fontWeight: 700,
+      padding: "8px 16px", borderRadius: "8px", cursor: "pointer"
+    }}
+  >🔔 NOTIFICATIONS {notifPanel ? "▼" : "▲"}</button>
 </div>
       </div>
 
@@ -516,7 +612,24 @@ color: "#c9d1d9",
         <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: backendOnline ? "#238636" : "#da3633" }}></div>
         <span>{backendOnline ? "backend online" : "connecting..."}</span>
         <span style={{ opacity: 0.3 }}>•</span>
-        <span>user: <span style={{color: "#f0f6fc", fontWeight: 600}}>{userId}</span></span>
+        <span>user: </span>
+        <input
+          type="text"
+          value={userId}
+          onChange={e => switchUser(e.target.value)}
+          placeholder="Enter user ID"
+          style={{
+            background: "rgba(255,255,255,0.05)",
+            border: "1px solid #30363d",
+            color: "#f0f6fc",
+            fontSize: "11px",
+            fontWeight: 600,
+            padding: "2px 8px",
+            borderRadius: "4px",
+            outline: "none",
+            width: "100px"
+          }}
+        />
       </div>
 
       {/* Memory Panel */}
@@ -528,6 +641,119 @@ color: "#c9d1d9",
               {memoryData[cat].map(item => <div key={item.id} style={{ fontSize: "11px", padding: "6px", borderBottom: "1px solid rgba(255,255,255,0.02)" }}>{item.text}</div>)}
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Notifications Panel */}
+      {notifPanel && (
+        <div style={{
+          background: "rgba(22, 27, 34, 0.9)", border: "1px solid #4f8ef7",
+          borderRadius: 12, padding: 20, marginBottom: 16,
+          animation: "fadeSlide 0.3s ease-out"
+        }}>
+          <h3 style={{ color: "#4f8ef7", marginTop: 0, fontSize: 14, fontWeight: 700, letterSpacing: "0.5px" }}>🔔 NOTIFICATION SETTINGS</h3>
+          <p style={{ color: "#8b949e", fontSize: 12, marginBottom: 16 }}>
+            Receive WhatsApp and email alerts when reminders fire.
+          </p>
+
+          <label style={{ color: "#c9d1d9", display: "block", marginBottom: 4, fontSize: 12 }}>
+            WhatsApp Number (E.164 format — e.g. +919876543210)
+          </label>
+          <input
+            value={notifPrefs.whatsapp}
+            onChange={e => setNotifPrefs(p => ({ ...p, whatsapp: e.target.value }))}
+            placeholder="+919876543210"
+            style={{
+              width: "100%", padding: "8px 12px", borderRadius: 6,
+              border: "1px solid #30363d", background: "rgba(255,255,255,0.05)",
+              color: "#f0f6fc", fontSize: 13, marginBottom: 14, boxSizing: "border-box"
+            }}
+          />
+
+          <label style={{ color: "#c9d1d9", display: "block", marginBottom: 4, fontSize: 12 }}>
+            Email Address
+          </label>
+          <input
+            value={notifPrefs.email}
+            onChange={e => setNotifPrefs(p => ({ ...p, email: e.target.value }))}
+            placeholder="you@example.com"
+            style={{
+              width: "100%", padding: "8px 12px", borderRadius: 6,
+              border: "1px solid #30363d", background: "rgba(255,255,255,0.05)",
+              color: "#f0f6fc", fontSize: 13, marginBottom: 14, boxSizing: "border-box"
+            }}
+          />
+
+          <label style={{ color: "#c9d1d9", display: "block", marginBottom: 8, fontSize: 12 }}>
+            Active Channels
+          </label>
+          <div style={{ display: "flex", gap: 20, marginBottom: 18 }}>
+            {["sse", "whatsapp", "email"].map(ch => (
+              <label key={ch} style={{ color: "#c9d1d9", cursor: "pointer", fontSize: 13, display: "flex", alignItems: "center", gap: 6 }}>
+                <input
+                  type="checkbox"
+                  checked={notifPrefs.channels.includes(ch)}
+                  onChange={e => {
+                    const updated = e.target.checked
+                      ? [...notifPrefs.channels, ch]
+                      : notifPrefs.channels.filter(c => c !== ch);
+                    setNotifPrefs(p => ({
+                      ...p,
+                      channels: updated.length ? updated : ["sse"]
+                    }));
+                  }}
+                />
+                {ch === "sse" ? "In-App (SSE)" : ch.charAt(0).toUpperCase() + ch.slice(1)}
+              </label>
+            ))}
+          </div>
+
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+            <button
+              onClick={saveNotifPrefs}
+              disabled={notifSaving}
+              style={{
+                background: "#4f8ef7", color: "#fff", border: "none",
+                padding: "8px 16px", borderRadius: 6, cursor: "pointer", fontSize: 13
+              }}
+            >
+              {notifSaving ? "Saving..." : "💾 Save Preferences"}
+            </button>
+            <button
+              onClick={() => testNotification("whatsapp")}
+              style={{
+                background: "#25d366", color: "#fff", border: "none",
+                padding: "8px 16px", borderRadius: 6, cursor: "pointer", fontSize: 13
+              }}
+            >
+              Test WhatsApp
+            </button>
+            <button
+              onClick={() => testNotification("email")}
+              style={{
+                background: "#c0392b", color: "#fff", border: "none",
+                padding: "8px 16px", borderRadius: 6, cursor: "pointer", fontSize: 13
+              }}
+            >
+              Test Email
+            </button>
+          </div>
+
+          {notifTestResult && (
+            <p style={{ margin: "8px 0 12px", color: "#4f8ef7", fontWeight: 700, fontSize: 13 }}>
+              {notifTestResult}
+            </p>
+          )}
+
+          <div style={{
+            background: "rgba(15, 27, 53, 0.6)", padding: "12px 14px",
+            borderRadius: 8, fontSize: 12, color: "#8b949e", lineHeight: 1.7
+          }}>
+            <strong style={{ color: "#aaa" }}>Setup notes</strong><br/>
+            <strong>WhatsApp:</strong> Text "join your-keyword" to +1 415 523 8886 once from your phone. Your keyword is in Twilio Console → Messaging → Try it out → WhatsApp.<br/>
+            <strong>Email:</strong> Sign up free at resend.com, create an API key, paste it in .env as RESEND_API_KEY.<br/>
+            You can also configure via chat: <em>"notify me on WhatsApp at +91XXXXXXXXXX"</em>
+          </div>
         </div>
       )}
 

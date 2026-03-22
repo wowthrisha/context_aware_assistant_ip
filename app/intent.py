@@ -39,4 +39,18 @@ class IntentDetector:
         ):
             return "save_habit"
 
+        # ── Notification preferences ───────────────────────────────────────────
+        if re.search(r"(notify|send|alert|ping)\s+me\s+on\s+whatsapp", t, re.I):
+            return "set_whatsapp_notification"
+        if re.search(r"whatsapp\s+(number|notify|notification|me at)", t, re.I):
+            return "set_whatsapp_notification"
+        if re.search(r"(notify|send|alert)\s+me\s+(by|via|on|at|to)\s+email", t, re.I):
+            return "set_email_notification"
+        if re.search(r"(my|set|use)\s+(email|gmail)\s+(for|to)\s+(reminder|notify|notification)", t, re.I):
+            return "set_email_notification"
+        if re.search(r"(disable|turn off|stop)\s+(whatsapp|email|notification)", t, re.I):
+            return "disable_notification"
+        if re.search(r"(show|what|list)\s+(my\s+)?(notification|notify)\s+(setting|pref|config)", t, re.I):
+            return "get_notification_prefs"
+
         return "general_chat"

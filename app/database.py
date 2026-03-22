@@ -41,9 +41,57 @@ def init_db() -> None:
         CREATE INDEX IF NOT EXISTS idx_user ON reminders(user_id);
         CREATE INDEX IF NOT EXISTS idx_status ON reminders(status);
         CREATE INDEX IF NOT EXISTS idx_trigger_at ON reminders(trigger_at);
+
+        CREATE TABLE IF NOT EXISTS notification_prefs (
+            user_id    TEXT PRIMARY KEY,
+            whatsapp   TEXT,
+            email      TEXT,
+            channels   TEXT DEFAULT 'sse',
+            updated_at TEXT NOT NULL
+        );
         """)
         conn.commit()
         logger.info("SQLite DB ready at %s", DB_PATH)
+    finally:
+        conn.close()
+
+
+# ── NOTIFICATION PREFS ──────────────────────────────────────────
+
+def upsert_notification_prefs(
+    user_id: str,
+    whatsapp: Optional[str] = None,
+    email: Optional[str] = None,
+    channels: Optional[list] = None,
+) -> None:
+    existing = get_notification_prefs(user_id)
+    wa = whatsapp if whatsapp is not None else (existing.get("whatsapp") if existing else None)
+    em = email if email is not None else (existing.get("email") if existing else None)
+    ch = ",".join(channels) if channels is not None else (existing.get("channels", "sse") if existing else "sse")
+    conn = _conn()
+    try:
+        conn.execute(
+            """INSERT INTO notification_prefs (user_id, whatsapp, email, channels, updated_at)
+               VALUES (?, ?, ?, ?, ?)
+               ON CONFLICT(user_id) DO UPDATE SET
+                   whatsapp   = excluded.whatsapp,
+                   email      = excluded.email,
+                   channels   = excluded.channels,
+                   updated_at = excluded.updated_at""",
+            (user_id, wa, em, ch, datetime.utcnow().isoformat()),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_notification_prefs(user_id: str) -> dict:
+    conn = _conn()
+    try:
+        row = conn.execute(
+            "SELECT * FROM notification_prefs WHERE user_id = ?", (user_id,)
+        ).fetchone()
+        return dict(row) if row else {}
     finally:
         conn.close()
 

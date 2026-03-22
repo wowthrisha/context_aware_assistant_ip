@@ -6,4 +6,6 @@ chromadb
 sentence-transformers
 python-dotenv
 pydantic
-sqlalchemy
+sqlalchemy
+twilio
+resend

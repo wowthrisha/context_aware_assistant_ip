@@ -8,6 +8,8 @@ from .assistant_service import run_assistant, chat_history, router, memory
 from .auth import get_current_user, create_token
 from .action_router import start_scheduler, stop_scheduler
 from .sse import sse_manager
+from .database import upsert_notification_prefs, get_notification_prefs
+from .notifier import send_whatsapp, send_email
 import asyncio
 import json
 from fastapi import Request
@@ -135,6 +137,81 @@ async def stream_reminders(request: Request, user_id: str):
             sse_manager.disconnect(user_id, q)
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+# ── Notification Prefs ─────────────────────────
+
+@app.get("/notification-prefs")
+def api_get_notification_prefs(user_id: str = Depends(get_current_user)):
+    prefs = get_notification_prefs(user_id.lower())
+    return {"prefs": prefs if prefs else {}}
+
+
+@app.post("/notification-prefs")
+def api_set_notification_prefs(
+    payload: dict,
+    user_id: str = Depends(get_current_user)
+):
+    """
+    Payload (all fields optional):
+    {
+      "whatsapp": "+91XXXXXXXXXX",
+      "email": "you@example.com",
+      "channels": ["sse", "whatsapp", "email"]
+    }
+    """
+    upsert_notification_prefs(
+        user_id=user_id.lower(),
+        whatsapp=payload.get("whatsapp"),
+        email=payload.get("email"),
+        channels=payload.get("channels"),
+    )
+    return {"status": "saved", "prefs": get_notification_prefs(user_id.lower())}
+
+
+@app.post("/test-notification")
+async def api_test_notification(
+    payload: dict,
+    user_id: str = Depends(get_current_user)
+):
+    """
+    Payload: {"channel": "whatsapp"|"email"|"all", "message": "optional text"}
+    Fires a test notification to the user's configured channels.
+    Runs blocking network calls in a thread pool so the HTTP connection stays alive.
+    """
+    import asyncio
+    from concurrent.futures import ThreadPoolExecutor
+
+    msg = payload.get("message", "Test notification from your Context Assistant.")
+    channel = payload.get("channel", "all")
+    prefs = get_notification_prefs(user_id.lower())
+    results = {}
+
+    loop = asyncio.get_event_loop()
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = []
+
+        if channel in ("whatsapp", "all") and prefs.get("whatsapp"):
+            futures.append(("whatsapp", loop.run_in_executor(
+                pool, send_whatsapp, prefs["whatsapp"], f"TEST: {msg}"
+            )))
+
+        if channel in ("email", "all") and prefs.get("email"):
+            futures.append(("email", loop.run_in_executor(
+                pool, send_email, prefs["email"],
+                "Test Notification — Context Assistant", msg
+            )))
+
+        for key, fut in futures:
+            results[key] = await fut
+
+    if not results:
+        return {
+            "status": "no_channels_configured",
+            "hint": "Set up WhatsApp or email first via chat or POST /notification-prefs"
+        }
+
+    return {"status": "dispatched", "results": results}
 
 
 # ── Memory ─────────────────────────

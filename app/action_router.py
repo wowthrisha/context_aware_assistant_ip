@@ -28,7 +28,9 @@ from .database import (
     mark_cancelled,
     get_all_reminders_db,
     get_pending_reminders_db,
+    get_notification_prefs,
 )
+from .notifier import dispatch_notifications
 
 from .time_parser import parse_time, extract_task
 
@@ -70,6 +72,24 @@ def _reminder_callback(reminder_id: str, message: str, user_id: str):
         "trigger_at": datetime.utcnow().isoformat()
     }
     sse_manager.emit(user_id, payload)
+
+    # Dispatch WhatsApp / Email notifications (non-fatal)
+    try:
+        from .database import get_notification_prefs
+
+        class _PrefsDB:
+            @staticmethod
+            def get_notification_prefs(uid):
+                return get_notification_prefs(uid)
+
+        notif_results = dispatch_notifications(
+            user_id=user_id,
+            reminder_message=message,
+            db=_PrefsDB(),
+        )
+        logger.info("Notifications dispatched for %s: %s", user_id, notif_results)
+    except Exception as notif_err:
+        logger.error("Notification dispatch non-fatal error: %s", notif_err)
 
 # ── Scheduler event logging ───────────────────────────────────────────────────
 

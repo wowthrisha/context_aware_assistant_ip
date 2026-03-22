@@ -23,3 +23,5 @@
 [2026-03-19 21:03:49.190882] EMIT to ridhu: {'type': 'reminder', 'reminder_id': '94e5b81d-edfb-4570-bf6e-61f94a887226', 'message': 'read newspaper', 'trigger_at': '2026-03-19T15:33:49.190386'}
 [2026-03-19 21:08:50.910507] EMIT to ridhu: {'type': 'reminder', 'reminder_id': '601db8d2-773e-4502-b9c3-1c377033d7d3', 'message': 'I want you to drink water', 'trigger_at': '2026-03-19T15:38:50.899841'}
 [2026-03-19 21:09:33.155086] EMIT to ridhu: {'type': 'reminder', 'reminder_id': '94b243c0-ff7f-405d-8349-dde3e555f7fb', 'message': 'submit my assignment', 'trigger_at': '2026-03-19T15:39:33.151759'}
+[2026-03-22 17:19:28.724788] DROP for ridhu: No connection
+[2026-03-22 17:38:18.101325] DROP for ridhu: No connection

@@ -18,6 +18,7 @@ from .action_router import ActionRouter
 from .memory import MemoryManager
 from .memory_extractor import extract_preference, extract_habit
 from .habit_suggester import suggest_from_habits
+from .database import upsert_notification_prefs, get_notification_prefs
 
 # ── Core singletons ─────────────────────────────────────────
 detector = IntentDetector()
@@ -108,6 +109,54 @@ def run_assistant(msg: str, user_id: str = "default") -> dict:
                 "time_hint": time_hint,
                 "message": f"Want me to set a daily reminder at {time_hint}?",
             }
+
+    # ── Set WhatsApp notification ─────────────
+    elif intent == "set_whatsapp_notification":
+        import re as _re
+        phone_match = _re.search(r'(\+?\d[\d\s\-]{8,14}\d)', msg)
+        if phone_match:
+            raw = phone_match.group(1).replace(" ", "").replace("-", "")
+            if not raw.startswith("+"):
+                raw = "+" + raw
+            upsert_notification_prefs(user_id, whatsapp=raw, channels=["sse", "whatsapp"])
+            reply = (
+                f"Done. I will send WhatsApp alerts to {raw} when your reminders fire. "
+                f"Make sure you have joined the Twilio Sandbox first by texting "
+                f"'join <your-keyword>' to +1 415 523 8886 once."
+            )
+        else:
+            reply = "Please include your WhatsApp number. Example: 'Notify me on WhatsApp at +919876543210'"
+        return {"reply": reply, "intent": intent, "system": None, "memory_saved": None, "proactive_suggestion": None}
+
+    # ── Set email notification ─────────────────
+    elif intent == "set_email_notification":
+        import re as _re
+        email_match = _re.search(r'[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}', msg)
+        if email_match:
+            addr = email_match.group(0)
+            upsert_notification_prefs(user_id, email=addr, channels=["sse", "email"])
+            reply = f"Got it. I will send email alerts to {addr} when your reminders fire."
+        else:
+            reply = "Please include your email address. Example: 'Notify me by email at you@example.com'"
+        return {"reply": reply, "intent": intent, "system": None, "memory_saved": None, "proactive_suggestion": None}
+
+    # ── Disable notification ───────────────────
+    elif intent == "disable_notification":
+        upsert_notification_prefs(user_id, channels=["sse"])
+        reply = "Notifications reset to in-app only. WhatsApp and email alerts are now off."
+        return {"reply": reply, "intent": intent, "system": None, "memory_saved": None, "proactive_suggestion": None}
+
+    # ── Get notification prefs ─────────────────
+    elif intent == "get_notification_prefs":
+        prefs = get_notification_prefs(user_id)
+        if not prefs:
+            reply = "No notification preferences set. You are receiving in-app (SSE) alerts only."
+        else:
+            ch = prefs.get("channels", "sse")
+            wa = prefs.get("whatsapp") or "not set"
+            em = prefs.get("email") or "not set"
+            reply = f"Your notification settings:\nChannels: {ch}\nWhatsApp: {wa}\nEmail: {em}"
+        return {"reply": reply, "intent": intent, "system": None, "memory_saved": None, "proactive_suggestion": None}
 
     # ── Recall memory ─────────────────────────
     elif intent == "recall_memory":
