@@ -28,47 +28,53 @@ def init_db() -> None:
     try:
         conn.executescript("""
         CREATE TABLE IF NOT EXISTS reminders (
-            id TEXT PRIMARY KEY,
-            user_id TEXT NOT NULL,
-            message TEXT NOT NULL,
-            trigger_at TEXT NOT NULL,
-            status TEXT NOT NULL DEFAULT 'pending',
-            created_at TEXT NOT NULL,
-            fired_at TEXT,
-            cancelled_at TEXT
+            id          TEXT PRIMARY KEY,
+            user_id     TEXT NOT NULL,
+            message     TEXT NOT NULL,
+            trigger_at  TEXT NOT NULL,
+            status      TEXT NOT NULL DEFAULT 'pending',
+            created_at  TEXT NOT NULL,
+            fired_at    TEXT,
+            cancelled_at TEXT,
+            recurrence  TEXT,
+            interval    INTEGER
         );
-
-        CREATE INDEX IF NOT EXISTS idx_user ON reminders(user_id);
-        CREATE INDEX IF NOT EXISTS idx_status ON reminders(status);
-        CREATE INDEX IF NOT EXISTS idx_trigger_at ON reminders(trigger_at);
+        CREATE INDEX IF NOT EXISTS idx_user     ON reminders(user_id);
+        CREATE INDEX IF NOT EXISTS idx_status   ON reminders(status);
+        CREATE INDEX IF NOT EXISTS idx_trigger  ON reminders(trigger_at);
         """)
         conn.commit()
-        logger.info("SQLite DB ready at %s", DB_PATH)
     finally:
         conn.close()
 
 
-# ── CREATE ─────────────────────────────────────
-
-def save_reminder(reminder_id: str, user_id: str, message: str, trigger_at: datetime):
+def save_reminder(
+    reminder_id: str,
+    user_id: str,
+    message: str,
+    trigger_at: datetime,
+    recurrence: str = None,
+    interval: int = None,
+):
     conn = _conn()
     try:
         conn.execute(
             """INSERT OR REPLACE INTO reminders
-            (id, user_id, message, trigger_at, status, created_at)
-            VALUES (?, ?, ?, ?, 'pending', ?)""",
+               (id, user_id, message, trigger_at, status, created_at, recurrence, interval)
+               VALUES (?, ?, ?, ?, 'pending', ?, ?, ?)""",
             (
                 reminder_id,
                 user_id,
                 message,
                 trigger_at.isoformat(),
                 datetime.utcnow().isoformat(),
+                recurrence,
+                interval,
             ),
         )
         conn.commit()
     finally:
         conn.close()
-
 
 # ── UPDATE ─────────────────────────────────────
 
