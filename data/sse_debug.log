@@ -23,5 +23,27 @@
 [2026-03-19 21:03:49.190882] EMIT to ridhu: {'type': 'reminder', 'reminder_id': '94e5b81d-edfb-4570-bf6e-61f94a887226', 'message': 'read newspaper', 'trigger_at': '2026-03-19T15:33:49.190386'}
 [2026-03-19 21:08:50.910507] EMIT to ridhu: {'type': 'reminder', 'reminder_id': '601db8d2-773e-4502-b9c3-1c377033d7d3', 'message': 'I want you to drink water', 'trigger_at': '2026-03-19T15:38:50.899841'}
 [2026-03-19 21:09:33.155086] EMIT to ridhu: {'type': 'reminder', 'reminder_id': '94b243c0-ff7f-405d-8349-dde3e555f7fb', 'message': 'submit my assignment', 'trigger_at': '2026-03-19T15:39:33.151759'}
-[2026-03-22 17:19:28.724788] DROP for ridhu: No connection
-[2026-03-22 17:38:18.101325] DROP for ridhu: No connection
+[2026-03-21 23:27:46.790703] EMIT to ridhu: {'type': 'reminder', 'reminder_id': '5061581d-3324-45ce-a267-85f95f27e9ae', 'message': 'give a reminder to brush my teeth', 'trigger_at': '2026-03-21T17:57:46.787060'}
+[2026-03-22 00:04:38.155033] EMIT to ridhu: {'type': 'reminder', 'reminder_id': 'ff1984b9-a5bb-4b2d-9e04-53e3b26b94ed', 'message': 'bath', 'trigger_at': '2026-03-21T18:34:38.154006'}
+[2026-03-22 00:27:27.953140] EMIT to ridhu: {'type': 'reminder', 'reminder_id': '3d77f975-2a6d-4a95-a35d-f9e0a527cb62', 'message': 'mins to drink water', 'trigger_at': '2026-03-21T18:57:27.935640'}
+[2026-03-22 00:43:29.782635] EMIT to ridhu: {'type': 'daily_summary', 'message': "Good morning! Here's your daily summary:\n\nNo reminders scheduled for today.\n\nRemember: User likes/prefers: love coffe in the morning\n\nHave a great day!"}
+[2026-03-22 00:43:31.040016] EMIT to ridhu: {'type': 'daily_summary', 'message': "Good morning! Here's your daily summary:\n\nNo reminders scheduled for today.\n\nHave a great day!"}
+[2026-03-22 00:43:31.673005] EMIT to ridhu: {'type': 'daily_summary', 'message': "Good morning! Here's your daily summary:\n\nNo reminders scheduled for today.\n\nHave a great day!"}
+[2026-03-22 00:43:32.067561] EMIT to ridhu: {'type': 'daily_summary', 'message': "Good morning! Here's your daily summary:\n\nNo reminders scheduled for today.\n\nHave a great day!"}
+[2026-03-22 00:43:32.079105] EMIT to ridhu: {'type': 'daily_summary', 'message': "Good morning! Here's your daily summary:\n\nNo reminders scheduled for today.\n\nHave a great day!"}
+[2026-03-22 00:43:35.181664] EMIT to ridhu: {'type': 'daily_summary', 'message': "Good morning! Here's your daily summary:\n\nNo reminders scheduled for today.\n\nHave a great day!"}
+[2026-03-22 00:43:41.024562] EMIT to ridhu: {'type': 'daily_summary', 'message': "Good morning! Here's your daily summary:\n\nNo reminders scheduled for today.\n\nHave a great day!"}
+[2026-03-22 00:43:45.692624] EMIT to ridhu: {'type': 'daily_summary', 'message': "Good morning! Here's your daily summary:\n\nNo reminders scheduled for today.\n\nHave a great day!"}
+[2026-03-22 00:43:46.153460] EMIT to ridhu: {'type': 'daily_summary', 'message': "Good morning! Here's your daily summary:\n\nNo reminders scheduled for today.\n\nHave a great day!"}
+[2026-03-22 00:43:46.256041] EMIT to ridhu: {'type': 'daily_summary', 'message': "Good morning! Here's your daily summary:\n\nNo reminders scheduled for today.\n\nHave a great day!"}
+[2026-03-22 00:43:46.500676] EMIT to ridhu: {'type': 'daily_summary', 'message': "Good morning! Here's your daily summary:\n\nNo reminders scheduled for today.\n\nHave a great day!"}
+[2026-03-22 00:43:59.263087] EMIT to ridhu: {'type': 'daily_summary', 'message': "Good morning! Here's your daily summary:\n\nNo reminders scheduled for today.\n\nHave a great day!"}
+[2026-03-22 00:44:21.107066] EMIT to ridhu: {'type': 'daily_summary', 'message': "Good morning! Here's your daily summary:\n\nNo reminders scheduled for today.\n\nHave a great day!"}
+[2026-03-22 00:44:22.565893] EMIT to ridhu: {'type': 'daily_summary', 'message': "Good morning! Here's your daily summary:\n\nNo reminders scheduled for today.\n\nHave a great day!"}
+[2026-03-22 00:44:23.779125] EMIT to ridhu: {'type': 'daily_summary', 'message': "Good morning! Here's your daily summary:\n\nNo reminders scheduled for today.\n\nHave a great day!"}
+[2026-03-22 00:44:25.670585] EMIT to ridhu: {'type': 'daily_summary', 'message': "Good morning! Here's your daily summary:\n\nNo reminders scheduled for today.\n\nHave a great day!"}
+[2026-03-22 00:44:45.150763] EMIT to ridhu: {'type': 'daily_summary', 'message': "Good morning! Here's your daily summary:\n\nNo reminders scheduled for today.\n\nHave a great day!"}
+[2026-03-22 00:44:52.744433] EMIT to ridhu: {'type': 'daily_summary', 'message': "Good morning! Here's your daily summary:\n\nNo reminders scheduled for today.\n\nHave a great day!"}
+[2026-03-22 00:49:04.098508] EMIT to ridhu: {'type': 'daily_summary', 'message': "Good morning! Here's your daily summary:\n\nYou have 1 reminder(s) today:\n  - 7:00 AM: to work out (recurring)\n\nHave a great day!"}
+[2026-03-22 00:49:23.082147] EMIT to ridhu: {'type': 'daily_summary', 'message': "Good morning! Here's your daily summary:\n\nYou have 2 reminder(s) today:\n  - 7:00 AM: to work out (recurring)\n  - 7:00 AM: reminder (recurring)\n\nHave a great day!"}
+[2026-03-22 00:49:36.537954] EMIT to ridhu: {'type': 'daily_summary', 'message': "Good morning! Here's your daily summary:\n\nYou have 2 reminder(s) today:\n  - 7:00 AM: to work out (recurring)\n  - 7:00 AM: reminder (recurring)\n\nHave a great day!"}
