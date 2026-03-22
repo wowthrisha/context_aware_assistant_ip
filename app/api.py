@@ -123,7 +123,6 @@ async def stream_reminders(request: Request, user_id: str):
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
-<<<<<<< HEAD
 # ── Notification Prefs ─────────────────────────
 
 @app.get("/notification-prefs")
@@ -199,10 +198,7 @@ async def api_test_notification(
     return {"status": "dispatched", "results": results}
 
 
-# ── Memory ─────────────────────────
-=======
 # ── Memory ────────────────────────────────────────────────────────────────────
->>>>>>> f7e66f612baa81668c94700f0150ac9d91fc1cc3
 
 @app.get("/memory/{memory_type}")
 def get_memory(memory_type: str):
