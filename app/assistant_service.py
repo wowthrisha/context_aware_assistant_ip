@@ -19,6 +19,17 @@ from .memory import MemoryManager
 from .memory_extractor import extract_preference, extract_habit
 from .habit_suggester import suggest_from_habits
 from .database import upsert_notification_prefs, get_notification_prefs
+from .conversation_store import load_history, clear_history
+
+# convo APIs re-exported for api layer
+
+def get_conversation_history(user_id: str):
+    return load_history(user_id)
+
+
+def clear_conversation_history(user_id: str):
+    clear_history(user_id)
+
 
 # ── Core singletons ─────────────────────────────────────────
 detector = IntentDetector()
