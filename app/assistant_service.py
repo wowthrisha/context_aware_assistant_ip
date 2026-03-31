@@ -19,6 +19,16 @@ from .memory import MemoryManager
 from .memory_extractor import extract_preference, extract_habit
 from .habit_suggester import suggest_from_habits
 from .database import upsert_notification_prefs, get_notification_prefs
+from .conversation_store import (
+    init_conversation_db,
+    save_turn,
+    load_history_text,
+    clear_history,
+    get_all_users,
+)
+
+# Ensure conversation DB is initialised on import
+init_conversation_db()
 
 # ── Core singletons ─────────────────────────────────────────
 detector = IntentDetector()
@@ -101,7 +111,7 @@ def run_assistant(msg: str, user_id: str = "default") -> dict:
             "stored": saved,
         }
 
-        reply = f"Got it, I've noted your routine. ✓\n\"{clean}\""
+        reply = "Got it. Is there anything else I can help you with?!"
 
         if time_hint:
             proactive_suggestion = {
@@ -219,3 +229,16 @@ def run_assistant(msg: str, user_id: str = "default") -> dict:
         "memory_saved": memory_saved,
         "proactive_suggestion": proactive_suggestion,
     }
+
+
+# ── Conversation History Functions ─────────────────────────────
+
+def get_conversation_history(user_id: str = "default") -> list[str]:
+    """Get conversation history for a user."""
+    history_text = load_history_text(user_id)
+    return history_text.split('\n') if history_text else []
+
+
+def clear_conversation_history(user_id: str = "default"):
+    """Clear conversation history for a user."""
+    clear_history(user_id)

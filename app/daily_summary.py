@@ -40,14 +40,6 @@ def _build_summary(user_id: str) -> str:
     else:
         lines.append("\nNo reminders scheduled for today.")
 
-    try:
-        mem = MemoryManager()
-        prefs = mem.retrieve_preferences("morning routine coffee")
-        if prefs:
-            lines.append(f"\nRemember: {prefs[0]}")
-    except Exception:
-        pass
-
     lines.append("\nHave a great day!")
     return "\n".join(lines)
 

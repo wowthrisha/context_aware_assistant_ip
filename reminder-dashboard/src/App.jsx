@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { formatDistanceToNow, parseISO } from 'date-fns';
+import { savePendingAction, getPendingActions, deletePendingAction, cacheData, getCachedData } from './offlineStore.js';
 
 const API = "http://127.0.0.1:8000";
 
@@ -26,7 +27,7 @@ const playBeep = () => {
     gain.connect(ctx.destination);
     osc.start();
     osc.stop(ctx.currentTime + 0.5);
-  } catch (e) {}
+  } catch (e) { }
 };
 
 //voice
@@ -46,7 +47,7 @@ const playMicOn = () => {
 
     osc.start();
     osc.stop(ctx.currentTime + 0.15);
-  } catch {}
+  } catch { }
 };
 
 const playMicOff = () => {
@@ -65,7 +66,7 @@ const playMicOff = () => {
 
     osc.start();
     osc.stop(ctx.currentTime + 0.2);
-  } catch {}
+  } catch { }
 };
 
 // --- Components ---
@@ -74,14 +75,14 @@ function Bubble({ role, text, selectedVoice }) {
   const [speaking, setSpeaking] = useState(false);
 
   const speak = () => {
-    
+
     if (speaking) {
       window.speechSynthesis.cancel();
       setSpeaking(false);
       return;
     }
     const cleaned = text.replace(/[\u{1F000}-\u{1FFFF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{FE00}-\u{FEFF}]|[\u{1F900}-\u{1F9FF}]|[\u{1FA00}-\u{1FA6F}]/gu, "").trim();
-const utterance = new SpeechSynthesisUtterance(cleaned);
+    const utterance = new SpeechSynthesisUtterance(cleaned);
     if (selectedVoice) utterance.voice = selectedVoice;
     utterance.onend = () => setSpeaking(false);
     window.speechSynthesis.cancel();
@@ -142,6 +143,21 @@ const utterance = new SpeechSynthesisUtterance(cleaned);
     </div>
   );
 }
+// Habit category icon mapper
+const getHabitIcon = (message) => {
+  const m = message.toLowerCase();
+  if (/sleep|nap|rest|bed|wake|morning|night/.test(m)) return "😴";
+  if (/workout|exercise|gym|run|walk|fitness|yoga|swim|sport/.test(m)) return "💪";
+  if (/medicine|pill|med|drug|vitamin|doctor|hospital/.test(m)) return "💊";
+  if (/meet|call|zoom|conference|appointment|interview/.test(m)) return "📅";
+  if (/eat|food|meal|breakfast|lunch|dinner|snack|cook/.test(m)) return "🍽️";
+  if (/study|learn|read|book|class|course|homework|exam/.test(m)) return "📚";
+  if (/message|text|email|whatsapp|slack|dm|chat/.test(m)) return "💬";
+  if (/drink|water|coffee|tea|juice|hydrate/.test(m)) return "☕";
+  if (/shower|bath|wash|clean|brush|teeth/.test(m)) return "🚿";
+  return "⏰"; // default
+};
+
 function ReminderCard({ reminder, onCancel }) {
   const isFired = reminder.status === "fired";
   const isCancelled = reminder.status === "cancelled";
@@ -154,15 +170,15 @@ function ReminderCard({ reminder, onCancel }) {
 
   return (
     <div
-  onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.03)"}
-  onMouseLeave={e => e.currentTarget.style.background = "transparent"}
-  style={{
-    display: "flex", alignItems: "center", padding: "16px 20px",
-    borderBottom: "1px solid rgba(255,255,255,0.05)",
-    borderLeft: `3px solid ${isFired ? "#238636" : isCancelled ? "#da3633" : "#3b82f6"}`,
-    gap: "20px", transition: "background 0.2s", background: "transparent"
-  }}
->
+      onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.03)"}
+      onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+      style={{
+        display: "flex", alignItems: "center", padding: "16px 20px",
+        borderBottom: "1px solid rgba(255,255,255,0.05)",
+        borderLeft: `3px solid ${isFired ? "#238636" : isCancelled ? "#da3633" : "#3b82f6"}`,
+        gap: "20px", transition: "background 0.2s", background: "transparent"
+      }}
+    >
       <div style={{
         width: "32px",
         height: "32px",
@@ -176,7 +192,10 @@ function ReminderCard({ reminder, onCancel }) {
         {isFired ? "✓" : isCancelled ? "✕" : "🔔"}
       </div>
       <div style={{ flex: 1 }}>
-        <div style={{ fontSize: "14px", fontWeight: 600, color: "#f0f6fc" }}>{reminder.message}</div>
+        <div style={{ fontSize: "14px", fontWeight: 600, color: "#f0f6fc", display: "flex", alignItems: "center", gap: "8px" }}>
+          <span>{getHabitIcon(reminder.message)}</span>
+          <span>{reminder.message}</span>
+        </div>
         <div style={{ fontSize: "11px", color: "#8b949e", marginTop: "4px" }}>
           <span style={{ marginRight: "10px" }}>{relativeTime.replace("about ", "")}</span>
           <span style={{ color: isPast && isPending ? "#f85149" : isFired ? "#3fb950" : "#8b949e", fontWeight: "bold", textTransform: "uppercase" }}>• {timeLabel}</span>
@@ -184,10 +203,10 @@ function ReminderCard({ reminder, onCancel }) {
       </div>
       <div>
         {isPending && (
-          <button 
+          <button
             onClick={() => onCancel(reminder.id)}
-            style={{ 
-              background: "#da3633", color: "#fff", border: "none", borderRadius: "4px", 
+            style={{
+              background: "#da3633", color: "#fff", border: "none", borderRadius: "4px",
               padding: "6px 16px", fontSize: "11px", fontWeight: 700, cursor: "pointer",
               textTransform: "uppercase"
             }}
@@ -206,11 +225,65 @@ export default function App() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [reminders, setReminders] = useState([]);
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
+
+  const syncPendingActions = async () => {
+    if (isOffline) return;
+    const actions = await getPendingActions();
+    if (actions.length === 0) return;
+
+    for (const action of actions) {
+      try {
+        await fetch(`${API}/chat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-User-ID": userId },
+          body: JSON.stringify({ message: action.text })
+        });
+        await deletePendingAction(action.id);
+      } catch (e) {
+        break;
+      }
+    }
+    fetchReminders();
+  };
+
+  useEffect(() => {
+    const checkRealInternet = () => {
+      const img = new Image();
+      const timer = setTimeout(() => {
+        img.src = "";
+        setIsOffline(true);
+      }, 3000);
+      img.onload = () => { clearTimeout(timer); setIsOffline(false); };
+      img.onerror = () => { clearTimeout(timer); setIsOffline(true); };
+      img.src = "https://www.google.com/favicon.ico?r=" + Math.random();
+    };
+
+    checkRealInternet();
+    const interval = setInterval(checkRealInternet, 5000);
+
+    const handleOffline = () => setIsOffline(true);
+    window.addEventListener('online', checkRealInternet);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('online', checkRealInternet);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
   const [filter, setFilter] = useState("all");
   const [backendOnline, setBackendOnline] = useState(true);
   const [memoryPanel, setMemoryPanel] = useState(false);
+
+  useEffect(() => {
+    if (!isOffline && backendOnline) syncPendingActions();
+  }, [backendOnline, isOffline]);
   const [memoryData, setMemoryData] = useState({ preference: [], habit: [], general: [] });
+  const [expandedMemory, setExpandedMemory] = useState({ preference: false, habit: false, general: false });
   const [toast, setToast] = useState(null);
+  const [suggestionChip, setSuggestionChip] = useState(null);
+  const [dailySummary, setDailySummary] = useState(null);
   const [userId, setUserId] = useState(() => localStorage.getItem('userId') || "ridhu");
   const [listening, setListening] = useState(false);
   const [selectedVoice, setSelectedVoice] = useState(null);
@@ -220,14 +293,14 @@ export default function App() {
   //voice
   const recognitionRef = useRef(null);
   const voiceStatusRef = useRef("idle");
-const [voiceStatus, setVoiceStatus] = useState("idle");
-useEffect(() => { voiceStatusRef.current = voiceStatus; }, [voiceStatus]);
-const sendVoiceRef = useRef(null);
+  const [voiceStatus, setVoiceStatus] = useState("idle");
+  useEffect(() => { voiceStatusRef.current = voiceStatus; }, [voiceStatus]);
+  const sendVoiceRef = useRef(null);
   // --- Notification panel state ---
-  const [notifPanel, setNotifPanel]             = useState(false);
-  const [notifPrefs, setNotifPrefs]             = useState({ whatsapp: "", email: "", channels: ["sse"] });
-  const [notifSaving, setNotifSaving]           = useState(false);
-  const [notifTestResult, setNotifTestResult]   = useState(null);
+  const [notifPanel, setNotifPanel] = useState(false);
+  const [notifPrefs, setNotifPrefs] = useState({ whatsapp: "", email: "", channels: ["sse"] });
+  const [notifSaving, setNotifSaving] = useState(false);
+  const [notifTestResult, setNotifTestResult] = useState(null);
 
   // --- Notification System ---
   const triggerNotification = (msg) => {
@@ -259,9 +332,13 @@ const sendVoiceRef = useRef(null);
           const payload = JSON.parse(e.data);
           if (payload.type === 'reminder') {
             triggerNotification(payload.message);
-            fetchReminders();
+            fetchReminders(); // Update stats immediately on SSE event
+          } else if (payload.type === 'daily_summary') {
+            setDailySummary(payload.message);
+            playBeep();
+            setTimeout(() => setDailySummary(null), 30000);
           }
-        } catch (err) {}
+        } catch (err) { }
       };
       es.onerror = () => { setBackendOnline(false); es.close(); setTimeout(connectSSE, 5000); };
       es.onopen = () => setBackendOnline(true);
@@ -272,6 +349,11 @@ const sendVoiceRef = useRef(null);
   }, [userId]);
 
   const fetchReminders = async () => {
+    if (isOffline) {
+      const cached = await getCachedData('reminders');
+      if (cached) setReminders(cached);
+      return;
+    }
     try {
       const r = await fetch(`${API}/reminders`, {
         headers: { "X-User-ID": userId }
@@ -279,23 +361,60 @@ const sendVoiceRef = useRef(null);
       if (r.ok) {
         const data = await r.json();
         setReminders(data.reminders || []);
+        await cacheData('reminders', data.reminders || []);
       }
     } catch { setBackendOnline(false); }
   };
 
   const cancelReminder = async (id) => {
-    await fetch(`${API}/reminders/${id}`, { 
+    await fetch(`${API}/reminders/${id}`, {
       method: "DELETE",
       headers: { "X-User-ID": userId }
     });
     fetchReminders();
   };
 
+  // Local polling for offline reminders
+  useEffect(() => {
+    if (!reminders || reminders.length === 0) return;
+    const timer = setInterval(() => {
+      const now = new Date();
+      let updated = false;
+      const nextReminders = reminders.map(r => {
+        if (r.status === "pending" && new Date(r.trigger_at) <= now) {
+          if (isOffline || r.id.startsWith("offline-")) {
+            triggerNotification(r.message);
+            updated = true;
+            return { ...r, status: "fired" };
+          }
+        }
+        return r;
+      });
+      if (updated) {
+        setReminders(nextReminders);
+        cacheData('reminders', nextReminders);
+      }
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [reminders, isOffline]);
+
   const fetchMemory = async () => {
+    if (isOffline) {
+      const cachedMem = await getCachedData('memory');
+      if (cachedMem) {
+        setMemoryData(cachedMem);
+      } else {
+        setToast({ message: "Memory fetch disabled while offline.", id: Date.now() });
+        setTimeout(() => setToast(null), 3000);
+      }
+      return;
+    }
     try {
       const results = await Promise.all(["preference", "habit", "general"].map(t => fetch(`${API}/memory/${t}`).then(res => res.json())));
-      setMemoryData({ preference: results[0].entries || [], habit: results[1].entries || [], general: results[2].entries || [] });
-    } catch {}
+      const newMem = { preference: results[0].entries || [], habit: results[1].entries || [], general: results[2].entries || [] };
+      setMemoryData(newMem);
+      await cacheData('memory', newMem);
+    } catch { }
   };
 
   const switchUser = (newUserId) => {
@@ -305,14 +424,14 @@ const sendVoiceRef = useRef(null);
 
   const loadNotifPrefs = async () => {
     try {
-      const res  = await fetch(`${API}/notification-prefs`, {
+      const res = await fetch(`${API}/notification-prefs`, {
         headers: { "X-User-ID": userId }
       });
       const data = await res.json();
       if (data.prefs && Object.keys(data.prefs).length > 0) {
         setNotifPrefs({
           whatsapp: data.prefs.whatsapp || "",
-          email:    data.prefs.email    || "",
+          email: data.prefs.email || "",
           channels: (data.prefs.channels || "sse").split(",")
         });
       }
@@ -325,11 +444,11 @@ const sendVoiceRef = useRef(null);
     setNotifSaving(true);
     try {
       await fetch(`${API}/notification-prefs`, {
-        method:  "POST",
+        method: "POST",
         headers: { "Content-Type": "application/json", "X-User-ID": userId },
-        body:    JSON.stringify({
+        body: JSON.stringify({
           whatsapp: notifPrefs.whatsapp || null,
-          email:    notifPrefs.email    || null,
+          email: notifPrefs.email || null,
           channels: notifPrefs.channels
         })
       });
@@ -346,10 +465,10 @@ const sendVoiceRef = useRef(null);
   const testNotification = async (channel) => {
     setNotifTestResult(null);
     try {
-      const res  = await fetch(`${API}/test-notification`, {
-        method:  "POST",
+      const res = await fetch(`${API}/test-notification`, {
+        method: "POST",
         headers: { "Content-Type": "application/json", "X-User-ID": userId },
-        body:    JSON.stringify({
+        body: JSON.stringify({
           channel,
           message: "Test from your Context Assistant dashboard."
         })
@@ -366,74 +485,121 @@ const sendVoiceRef = useRef(null);
   };
 
   const send = async () => {
-  if (!input.trim() || loading) return;
+    if (!input.trim() || loading) return;
 
-  setMessages(prev => [...prev, { role: "user", text: input }]);
-  setLoading(true);
-  setInput("");
+    setMessages(prev => [...prev, { role: "user", text: input }]);
+    const currentInput = input;
+    setInput("");
 
-  try {
-    const r = await fetch(`${API}/chat`, {
-      method: "POST",
-      headers: { 
-        "Content-Type": "application/json",
-        "X-User-ID": userId 
-      },
-      body: JSON.stringify({ message: input })
-    });
+    if (isOffline) {
+      if (currentInput.toLowerCase() === "show reminders") {
+        setMessages(prev => [...prev, { role: "assistant", text: "Here are your current reminders from the offline cache." }]);
+        return;
+      }
+      const remindMatch = currentInput.match(/^remind me to (.+)/i);
+      if (remindMatch) {
+        let delayMs = 60000; // Default 1 minute if no specific time matched
+        const minMatch = currentInput.match(/in (\d+) (minute|min)/i);
+        const secMatch = currentInput.match(/in (\d+) (second|sec)/i);
+        const hrMatch = currentInput.match(/in (\d+) (hour|hr)/i);
+        
+        if (hrMatch) delayMs = parseInt(hrMatch[1]) * 3600000;
+        else if (minMatch) delayMs = parseInt(minMatch[1]) * 60000;
+        else if (secMatch) delayMs = parseInt(secMatch[1]) * 1000;
 
-    const data = await r.json();
+        const newReminder = {
+          id: "offline-" + crypto.randomUUID(),
+          message: remindMatch[1].replace(/in \d+ (minute|min|second|sec|hour|hr)s?/i, "").trim(),
+          status: "pending",
+          trigger_at: new Date(Date.now() + delayMs).toISOString()
+        };
+        await savePendingAction({ id: newReminder.id, type: "reminder", text: currentInput });
+        const newRemindersList = [...reminders, newReminder];
+        setReminders(newRemindersList);
+        await cacheData('reminders', newRemindersList);
+        setMessages(prev => [...prev, { role: "assistant", text: "Saved offline. Will sync when online." }]);
+      } else {
+        await savePendingAction({ id: "draft-" + crypto.randomUUID(), type: "chat", text: currentInput });
+        setMessages(prev => [...prev, { role: "assistant", text: "You are offline. Message saved as draft and will sync when online." }]);
+      }
+      return;
+    }
 
-    setMessages(prev => [...prev, { role: "assistant", text: data.reply }]);
+    setLoading(true);
 
-    // 🔊 ADD THIS (voice reply for text too)
-    setVoiceStatus("idle");
+    try {
+      const r = await fetch(`${API}/chat`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-User-ID": userId
+        },
+        body: JSON.stringify({ message: currentInput })
+      });
 
-    if (data.system?.reminder_id) fetchReminders();
-    if (data.memory_saved) fetchMemory();
+      const data = await r.json();
 
-  } catch {
-    setBackendOnline(false);
-  }
+      setMessages(prev => [...prev, { role: "assistant", text: data.reply }]);
 
-  setLoading(false);
-};
+      // Handle suggestion chips
+      if (data.proactive_suggestion) {
+        setSuggestionChip(data.proactive_suggestion);
+      }
+
+      // 🔊 ADD THIS (voice reply for text too)
+      setVoiceStatus("idle");
+
+      if (data.system?.reminder_id) fetchReminders();
+      if (data.memory_saved) fetchMemory();
+
+    } catch {
+      setBackendOnline(false);
+    }
+
+    setLoading(false);
+  };
 
   //voice
   const sendVoice = async (voiceText) => {
-  console.log("🚀 sendVoice CALLED with:", voiceText); // ← confirm this fires
-  
-  setMessages(prev => [...prev, { role: "user", text: voiceText }]);
-  setLoading(true);
+    if (isOffline) {
+      setToast({ message: "Voice assistant disabled while offline.", id: Date.now() });
+      setTimeout(() => setToast(null), 3000);
+      return;
+    }
+    console.log("🚀 sendVoice CALLED with:", voiceText); // ← confirm this fires
 
-  try {
-    const r = await fetch(`${API}/chat`, {
-      method: "POST",
-      headers: { 
-        "Content-Type": "application/json",
-        "X-User-ID": userId 
-      },
-      body: JSON.stringify({ message: voiceText })
-    });
-    const data = await r.json();
-    console.log("✅ Got reply:", data.reply);
-    setMessages(prev => [...prev, { role: "assistant", text: data.reply }]);
-    const cleaned = data.reply.replace(/[\u{1F000}-\u{1FFFF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{FE00}-\u{FEFF}]|[\u{1F900}-\u{1F9FF}]|[\u{1FA00}-\u{1FA6F}]/gu, "").trim();
-const speech = new SpeechSynthesisUtterance(cleaned);
-if (selectedVoice) speech.voice = selectedVoice;
-window.speechSynthesis.speak(speech);
-    if (data.system?.reminder_id) fetchReminders();
-  } catch(e) {
-    console.error("❌ fetch failed:", e);
-    setBackendOnline(false);
-  }
-  setLoading(false);
-};
+    setMessages(prev => [...prev, { role: "user", text: voiceText }]);
+    setLoading(true);
 
-sendVoiceRef.current = sendVoice;
-//sendVoiceRef.current = sendVoice;
+    try {
+      const r = await fetch(`${API}/chat`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-User-ID": userId
+        },
+        body: JSON.stringify({ message: voiceText })
+      });
+      const data = await r.json();
+      console.log("✅ Got reply:", data.reply);
+      setMessages(prev => [...prev, { role: "assistant", text: data.reply }]);
+      const cleaned = data.reply.replace(/[\u{1F000}-\u{1FFFF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{FE00}-\u{FEFF}]|[\u{1F900}-\u{1F9FF}]|[\u{1FA00}-\u{1FA6F}]/gu, "").trim();
+      const speech = new SpeechSynthesisUtterance(cleaned);
+      if (selectedVoice) speech.voice = selectedVoice;
+      window.speechSynthesis.speak(speech);
+      if (data.system?.reminder_id) fetchReminders();
+    } catch (e) {
+      console.error("❌ fetch failed:", e);
+      setBackendOnline(false);
+    }
+    setLoading(false);
+  };
+
+  sendVoiceRef.current = sendVoice;
+  //sendVoiceRef.current = sendVoice;
   useEffect(() => {
     fetchReminders();
+    fetchMemory(); // Eagerly cache memory on startup for offline use
     const interval = setInterval(fetchReminders, 5000);
     return () => clearInterval(interval);
   }, []);
@@ -447,69 +613,69 @@ sendVoiceRef.current = sendVoice;
     fired: reminders.filter(r => r.status === "fired").length,
     cancelled: reminders.filter(r => r.status === "cancelled").length
   };
-  
+
   //voice
   useEffect(() => {
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SpeechRecognition) return;
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
 
-  const recognition = new SpeechRecognition();
-  recognition.continuous = false;
-  recognition.interimResults = true;
-  recognition.lang = "en-US";
+    const recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.lang = "en-US";
 
-  recognition.onstart = () => { setListening(true); setVoiceStatus("listening"); };
-  recognition.onend = () => {
-    setListening(false);
-    if (voiceStatusRef.current !== "speaking" && voiceStatusRef.current !== "processing") {
+    recognition.onstart = () => { setListening(true); setVoiceStatus("listening"); };
+    recognition.onend = () => {
+      setListening(false);
+      if (voiceStatusRef.current !== "speaking" && voiceStatusRef.current !== "processing") {
+        setVoiceStatus("idle");
+      }
+    };
+
+    recognition.onresult = (event) => {
+      const last = event.results[event.results.length - 1];
+
+      if (!last.isFinal) {
+        // build full interim from ALL results so far
+        let interim = "";
+        for (let i = 0; i < event.results.length; i++) {
+          interim += event.results[i][0].transcript;
+        }
+        setInput(interim);
+        return;
+      }
+
+      const finalText = last[0].transcript.trim();
+      console.log("📢 Final:", finalText);
+      console.log("📢 Ref:", sendVoiceRef.current);
+      sendVoiceRef.current(finalText);
+      setInput("");
+    };
+
+    recognition.onerror = (e) => {
+      if (e.error === "no-speech" || e.error === "aborted") return;
+      console.error("Speech error:", e.error);
       setVoiceStatus("idle");
-    }
-  };
+    };
 
-  recognition.onresult = (event) => {
-  const last = event.results[event.results.length - 1];
+    recognitionRef.current = recognition;
+  }, []);
 
-if (!last.isFinal) {
-  // build full interim from ALL results so far
-  let interim = "";
-  for (let i = 0; i < event.results.length; i++) {
-    interim += event.results[i][0].transcript;
-  }
-  setInput(interim);
-  return;
-}
-
-const finalText = last[0].transcript.trim();
-  console.log("📢 Final:", finalText);
-  console.log("📢 Ref:", sendVoiceRef.current);
-  sendVoiceRef.current(finalText);
-  setInput("");
-};
-
-  recognition.onerror = (e) => {
-    if (e.error === "no-speech" || e.error === "aborted") return;
-    console.error("Speech error:", e.error);
-    setVoiceStatus("idle");
-  };
-
-  recognitionRef.current = recognition;
-}, []);
-
-useEffect(() => {
-  const loadVoices = () => {
-    const v = window.speechSynthesis.getVoices();
-    if (v.length) setVoices(v);
-  };
-  loadVoices();
-  window.speechSynthesis.onvoiceschanged = loadVoices;
-}, []);
+  useEffect(() => {
+    const loadVoices = () => {
+      const v = window.speechSynthesis.getVoices();
+      if (v.length) setVoices(v);
+    };
+    loadVoices();
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+  }, []);
 
   return (
     <div style={{
       width: "100vw", height: "100vh", background: "linear-gradient(-45deg, #0d1117, #0f1923, #0d1117, #111827)",
-backgroundSize: "400% 400%",
-animation: "gradientShift 15s ease infinite",
-color: "#c9d1d9",
+      backgroundSize: "400% 400%",
+      animation: "gradientShift 15s ease infinite",
+      color: "#c9d1d9",
       fontFamily: "'Inter', sans-serif", display: "flex", flexDirection: "column",
       padding: "20px", boxSizing: "border-box", overflow: "hidden"
     }}>
@@ -529,20 +695,20 @@ color: "#c9d1d9",
 @keyframes wave4 { 0%,100% { height: 10px; } 50% { height: 18px; } }
 @keyframes dots { 0%,20% { opacity:0; } 50% { opacity:1; } 100% { opacity:0; } }
       `}</style>
-      
+
       {/* Premium Legible Toast */}
       {toast && (
         <div style={{
           position: "fixed", top: "40px", right: "40px", zIndex: 3000,
           background: "rgba(13, 17, 23, 0.9)", backdropFilter: "blur(20px)",
-          border: "1px solid rgba(59, 130, 246, 0.5)", color: "#fff", 
+          border: "1px solid rgba(59, 130, 246, 0.5)", color: "#fff",
           padding: "24px", borderRadius: "20px", width: "360px",
-          display: "flex", alignItems: "flex-start", gap: "20px", 
+          display: "flex", alignItems: "flex-start", gap: "20px",
           boxShadow: "0 20px 50px rgba(0,0,0,0.6), 0 0 20px rgba(59, 130, 246, 0.2)",
           animation: "toastIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275)"
         }}>
-          <div style={{ 
-            fontSize: "32px", background: "linear-gradient(135deg, #3b82f6, #1d4ed8)", 
+          <div style={{
+            fontSize: "32px", background: "linear-gradient(135deg, #3b82f6, #1d4ed8)",
             padding: "12px", borderRadius: "16px", boxShadow: "0 8px 16px rgba(59, 130, 246, 0.4)",
             animation: "pulseIcon 2s infinite"
           }}>⏰</div>
@@ -550,11 +716,11 @@ color: "#c9d1d9",
             <div style={{ fontSize: "11px", fontWeight: 800, color: "#3b82f6", letterSpacing: "1.5px", marginBottom: "6px", textTransform: "uppercase" }}>REMINDER FIRED</div>
             <div style={{ fontSize: "18px", fontWeight: 700, color: "#ffffff", lineHeight: "1.4", textShadow: "0 2px 4px rgba(0,0,0,0.3)" }}>{toast.message}</div>
             <div style={{ marginTop: "16px", display: "flex", gap: "10px" }}>
-              <button 
-                onClick={() => setToast(null)} 
-                style={{ 
-                  flex: 1, background: "rgba(255,255,255,0.05)", color: "#fff", 
-                  border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px", 
+              <button
+                onClick={() => setToast(null)}
+                style={{
+                  flex: 1, background: "rgba(255,255,255,0.05)", color: "#fff",
+                  border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px",
                   padding: "8px", fontSize: "12px", fontWeight: 600, cursor: "pointer",
                   transition: "background 0.2s"
                 }}
@@ -568,49 +734,105 @@ color: "#c9d1d9",
         </div>
       )}
 
-      {/* Header exactly like screenshot */}
+      {/* Daily Summary Notification */}
+      {dailySummary && (
+        <div style={{
+          position: "fixed", top: "40px", right: "40px", zIndex: 3000,
+          background: "rgba(13, 17, 23, 0.95)", backdropFilter: "blur(20px)",
+          border: "1px solid rgba(59, 130, 246, 0.5)", color: "#fff", 
+          padding: "24px", borderRadius: "20px", width: "400px",
+          display: "flex", flexDirection: "column", gap: "12px",
+          boxShadow: "0 20px 50px rgba(0,0,0,0.6), 0 0 20px rgba(59, 130, 246, 0.2)",
+          animation: "toastIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275)"
+        }}>
+          <div style={{ 
+            fontSize: "32px", background: "linear-gradient(135deg, #3b82f6, #1d4ed8)", 
+            padding: "12px", borderRadius: "16px", boxShadow: "0 8px 16px rgba(59, 130, 246, 0.4)",
+            animation: "pulseIcon 2s infinite", alignSelf: "flex-start"
+          }}>📅</div>
+          <div>
+            <div style={{ fontSize: "11px", fontWeight: 800, color: "#3b82f6", letterSpacing: "1.5px", marginBottom: "6px", textTransform: "uppercase" }}>DAILY SUMMARY</div>
+            <div style={{ fontSize: "14px", fontWeight: 500, color: "#ffffff", lineHeight: "1.6", whiteSpace: "pre-line" }}>{dailySummary}</div>
+          </div>
+          <button 
+            onClick={() => setDailySummary(null)} 
+            style={{ 
+              alignSelf: "flex-end",
+              background: "rgba(255,255,255,0.05)", color: "#fff", 
+              border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px", 
+              padding: "8px 16px", fontSize: "12px", fontWeight: 600, cursor: "pointer",
+              transition: "background 0.2s"
+            }}
+            onMouseOver={e => e.target.style.background = "rgba(255,255,255,0.1)"}
+            onMouseOut={e => e.target.style.background = "rgba(255,255,255,0.05)"}
+          >
+            DISMISS
+          </button>
+        </div>
+      )}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", padding: "0 10px" }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: "12px" }}>
           <h1 style={{ fontFamily: "'Syne', sans-serif", fontSize: "26px", fontWeight: 800, margin: 0, color: "#fff", letterSpacing: "-0.5px" }}>ASSISTANT</h1>
           <span style={{ fontSize: "11px", fontWeight: 700, color: "#484f58", letterSpacing: "1px" }}>REMINDER SYSTEM V2</span>
         </div>
         <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-  <select
-    onChange={e => {
-      const v = voices.find(v => v.name === e.target.value);
-      setSelectedVoice(v || null);
-    }}
-    style={{
-      background: "rgba(255,255,255,0.03)", border: "1px solid #30363d",
-      color: "#8b949e", fontSize: "11px", fontWeight: 700,
-      padding: "8px 12px", borderRadius: "8px", cursor: "pointer", outline: "none"
-    }}
-  >
-    <option value="">🔊 Default Voice</option>
-    {voices
-      .filter(v => v.lang.startsWith("en"))
-      .map(v => (
-        <option key={v.name} value={v.name}>{v.name}</option>
-      ))
-    }
-  </select>
-  <button onClick={() => { if(!memoryPanel) fetchMemory(); setMemoryPanel(!memoryPanel); }} style={{ background: "transparent", border: "none", color: "#8b949e", fontSize: "11px", fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: "8px", background: "rgba(255,255,255,0.03)", padding: "8px 16px", borderRadius: "8px" }}>🧠 MEMORY {memoryPanel ? "▼" : "▲"}</button>
-  <button
-    onClick={() => setNotifPanel(p => !p)}
-    style={{
-      background: notifPanel ? "#4f8ef7" : "rgba(255,255,255,0.03)",
-      border: "1px solid #4f8ef7",
-      color: notifPanel ? "#fff" : "#4f8ef7",
-      fontSize: "11px", fontWeight: 700,
-      padding: "8px 16px", borderRadius: "8px", cursor: "pointer"
-    }}
-  >🔔 NOTIFICATIONS {notifPanel ? "▼" : "▲"}</button>
-</div>
+          <select
+            onChange={e => {
+              const v = voices.find(v => v.name === e.target.value);
+              setSelectedVoice(v || null);
+            }}
+            style={{
+              background: "rgba(255,255,255,0.03)", border: "1px solid #30363d",
+              color: "#8b949e", fontSize: "11px", fontWeight: 700,
+              padding: "8px 12px", borderRadius: "8px", cursor: "pointer", outline: "none"
+            }}
+          >
+            <option value="">🔊 Default Voice</option>
+            {voices
+              .filter(v => v.lang.startsWith("en"))
+              .map(v => (
+                <option key={v.name} value={v.name}>{v.name}</option>
+              ))
+            }
+          </select>
+          <button onClick={() => { if(!memoryPanel) fetchMemory(); setMemoryPanel(!memoryPanel); }} style={{ background: "transparent", border: "none", color: "#8b949e", fontSize: "11px", fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: "8px", background: "rgba(255,255,255,0.03)", padding: "8px 16px", borderRadius: "8px" }}>🧠 MEMORY {memoryPanel ? "▼" : "▲"}</button>
+          <button
+            onClick={() => setNotifPanel(p => !p)}
+            style={{
+              background: notifPanel ? "#4f8ef7" : "rgba(255,255,255,0.03)",
+              border: "1px solid #4f8ef7",
+              color: notifPanel ? "#fff" : "#4f8ef7",
+              fontSize: "11px", fontWeight: 700,
+              padding: "8px 16px", borderRadius: "8px", cursor: "pointer"
+            }}
+          >🔔 NOTIFICATIONS {notifPanel ? "▼" : "▲"}</button>
+          <button
+            onClick={async () => {
+              try {
+                const r = await fetch(`${API}/summary/trigger`, {
+                  method: "POST",
+                  headers: { "X-User-ID": userId }
+                });
+                if (r.ok) {
+                  setToast({ message: "Daily summary triggered!", id: Date.now() });
+                  setTimeout(() => setToast(null), 3000);
+                }
+              } catch {}
+            }}
+            style={{
+              background: "rgba(255,255,255,0.03)",
+              border: "1px solid #238636",
+              color: "#238636",
+              fontSize: "11px", fontWeight: 700,
+              padding: "8px 16px", borderRadius: "8px", cursor: "pointer"
+            }}
+          >📅 SUMMARY</button>
+        </div>
       </div>
 
       <div style={{ fontSize: "11px", color: "#8b949e", display: "flex", gap: "10px", alignItems: "center", marginBottom: "20px", padding: "0 10px" }}>
-        <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: backendOnline ? "#238636" : "#da3633" }}></div>
-        <span>{backendOnline ? "backend online" : "connecting..."}</span>
+        <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: isOffline ? "#da3633" : backendOnline ? "#238636" : "#f59e0b" }}></div>
+        <span>{isOffline ? "🔴 offline" : backendOnline ? "🟢 online" : "🟡 backend down"}</span>
         <span style={{ opacity: 0.3 }}>•</span>
         <span>user: </span>
         <input
@@ -632,15 +854,201 @@ color: "#c9d1d9",
         />
       </div>
 
-      {/* Memory Panel */}
+      {/* Memory Panel with ML Features */}
       {memoryPanel && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "15px", marginBottom: "20px", animation: "fadeSlide 0.3s ease-out" }}>
-          {["preference", "habit", "general"].map(cat => (
-            <div key={cat} style={{ background: "rgba(22, 27, 34, 0.5)", border: "1px solid rgba(255,255,255,0.05)", borderRadius: "12px", padding: "12px" }}>
-              <div style={{ fontSize: "9px", fontWeight: 800, color: "#8b949e", marginBottom: "8px", textTransform: "uppercase" }}>{cat}</div>
-              {memoryData[cat].map(item => <div key={item.id} style={{ fontSize: "11px", padding: "6px", borderBottom: "1px solid rgba(255,255,255,0.02)" }}>{item.text}</div>)}
-            </div>
-          ))}
+          {["preference", "habit", "general"].map(cat => {
+            // Group preferences by sentiment
+            const items = memoryData[cat];
+            const positivePrefs = items.filter(i => i.meta?.sentiment === "positive" || i.text?.includes("love") || i.text?.includes("like"));
+            const negativePrefs = items.filter(i => i.meta?.sentiment === "negative" || i.text?.includes("hate") || i.text?.includes("dislike"));
+            
+            return (
+              <div key={cat} style={{ background: "rgba(22, 27, 34, 0.5)", border: "1px solid rgba(255,255,255,0.05)", borderRadius: "12px", padding: "12px", maxHeight: "300px", overflow: "auto" }}>
+                <div style={{ fontSize: "9px", fontWeight: 800, color: "#8b949e", marginBottom: "8px", textTransform: "uppercase", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span>{cat}</span>
+                  <span style={{ background: "rgba(59,130,246,0.2)", color: "#3b82f6", padding: "2px 6px", borderRadius: "4px", fontSize: "8px" }}>{items.length}</span>
+                </div>
+                
+                {/* Positive Preferences - Green Badge */}
+                {cat === "preference" && positivePrefs.length > 0 && (
+                  <div style={{ marginBottom: "8px" }}>
+                    <div style={{ fontSize: "8px", color: "#238636", marginBottom: "4px", textTransform: "uppercase", fontWeight: 700 }}>😊 Likes ({positivePrefs.length})</div>
+                    {positivePrefs.slice(0, expandedMemory.preference ? positivePrefs.length : 5).map((item, idx) => (
+                      <div key={`pos-${idx}`} style={{ 
+                        fontSize: "11px", 
+                        padding: "6px 8px", 
+                        marginBottom: "4px",
+                        background: "rgba(35,134,54,0.1)", 
+                        borderRadius: "6px",
+                        borderLeft: "2px solid #238636",
+                        color: "#c9d1d9"
+                      }}>
+                        {item.text?.replace(/User likes\/prefers:\s*/i, '').replace(/["']$/, '').trim()}
+                        {item.meta?.created_at && (
+                          <div style={{ fontSize: "8px", color: "#484f58", marginTop: "2px" }}>
+                            {new Date(item.meta.created_at).toLocaleDateString()}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                    {positivePrefs.length > 5 && (
+                      <button 
+                        onClick={() => setExpandedMemory(prev => ({ ...prev, preference: !prev.preference }))}
+                        style={{ 
+                          fontSize: "9px", 
+                          color: "#3b82f6", 
+                          background: "transparent",
+                          border: "none",
+                          cursor: "pointer",
+                          padding: "4px 8px",
+                          marginTop: "4px"
+                        }}
+                      >
+                        {expandedMemory.preference ? "Show less" : `+${positivePrefs.length - 5} more items`}
+                      </button>
+                    )}
+                  </div>
+                )}
+                
+                {/* Negative Preferences - Red Badge */}
+                {cat === "preference" && negativePrefs.length > 0 && (
+                  <div style={{ marginBottom: "8px" }}>
+                    <div style={{ fontSize: "8px", color: "#da3633", marginBottom: "4px", textTransform: "uppercase", fontWeight: 700 }}>😞 Dislikes ({negativePrefs.length})</div>
+                    {negativePrefs.slice(0, expandedMemory.preference ? negativePrefs.length : 3).map((item, idx) => (
+                      <div key={`neg-${idx}`} style={{ 
+                        fontSize: "11px", 
+                        padding: "6px 8px", 
+                        marginBottom: "4px",
+                        background: "rgba(218,54,51,0.1)", 
+                        borderRadius: "6px",
+                        borderLeft: "2px solid #da3633",
+                        color: "#c9d1d9"
+                      }}>
+                        {item.text?.replace(/User dislikes:\s*/i, '').replace(/["']$/, '').trim()}
+                      </div>
+                    ))}
+                    {negativePrefs.length > 3 && (
+                      <button 
+                        onClick={() => setExpandedMemory(prev => ({ ...prev, preference: !prev.preference }))}
+                        style={{ 
+                          fontSize: "9px", 
+                          color: "#3b82f6", 
+                          background: "transparent",
+                          border: "none",
+                          cursor: "pointer",
+                          padding: "4px 8px",
+                          marginTop: "4px"
+                        }}
+                      >
+                        {expandedMemory.preference ? "Show less" : `+${negativePrefs.length - 3} more items`}
+                      </button>
+                    )}
+                  </div>
+                )}
+                
+                {/* Habits with Time Badges - Grouped by time */}
+                {cat === "habit" && (() => {
+                  // Group habits by extracted time
+                  const timeGroups = {};
+                  items.forEach(item => {
+                    const timeMatch = item.text?.match(/(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)/i);
+                    const time = timeMatch ? timeMatch[1] : 'no time';
+                    if (!timeGroups[time]) timeGroups[time] = [];
+                    timeGroups[time].push(item);
+                  });
+                  
+                  return Object.entries(timeGroups).map(([time, habits]) => (
+                    <div key={time} style={{ marginBottom: "8px" }}>
+                      <div style={{ 
+                        fontSize: "9px", 
+                        color: "#8b949e", 
+                        marginBottom: "4px", 
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px"
+                      }}>
+                        <span>⏰ {time}</span>
+                        <span style={{ color: "#484f58" }}>({habits.length} habits)</span>
+                      </div>
+                      {habits.slice(0, expandedMemory.habit ? habits.length : 2).map((item, idx) => (
+                        <div key={idx} style={{ 
+                          fontSize: "11px", 
+                          padding: "6px 8px", 
+                          marginBottom: "4px",
+                          background: "rgba(139,148,158,0.1)", 
+                          borderRadius: "6px",
+                          borderLeft: "2px solid #8b949e",
+                          color: "#c9d1d9"
+                        }}>
+                          {item.text?.replace(/User habit:\s*/i, '').replace(/\(at .+?\)/, '').replace(/["']$/, '').trim()}
+                        </div>
+                      ))}
+                      {habits.length > 2 && !expandedMemory.habit && (
+                        <div style={{ fontSize: "9px", color: "#484f58", fontStyle: "italic", paddingLeft: "8px" }}>
+                          +{habits.length - 2} more
+                        </div>
+                      )}
+                    </div>
+                  ));
+                })()}
+                
+                {/* General Memories */}
+                {cat === "general" && (
+                  <>
+                    {items.slice(0, expandedMemory.general ? items.length : 5).map((item, idx) => (
+                      <div key={idx} style={{ 
+                        fontSize: "11px", 
+                        padding: "6px 8px", 
+                        marginBottom: "4px",
+                        background: "rgba(255,255,255,0.03)", 
+                        borderRadius: "6px",
+                        color: "#c9d1d9"
+                      }}>
+                        {item.text?.length > 50 ? item.text.substring(0, 50) + '...' : item.text}
+                      </div>
+                    ))}
+                    {items.length > 5 && (
+                      <button 
+                        onClick={() => setExpandedMemory(prev => ({ ...prev, general: !prev.general }))}
+                        style={{ 
+                          fontSize: "9px", 
+                          color: "#3b82f6", 
+                          background: "transparent",
+                          border: "none",
+                          cursor: "pointer",
+                          padding: "4px 8px",
+                          marginTop: "4px"
+                        }}
+                      >
+                        {expandedMemory.general ? "Show less" : `+${items.length - 5} more items`}
+                      </button>
+                    )}
+                  </>
+                )}
+                
+                {/* Habit Expand Button */}
+                {cat === "habit" && items.length > 4 && (
+                  <button 
+                    onClick={() => setExpandedMemory(prev => ({ ...prev, habit: !prev.habit }))}
+                    style={{ 
+                      fontSize: "9px", 
+                      color: "#3b82f6", 
+                      background: "transparent",
+                      border: "none",
+                      cursor: "pointer",
+                      padding: "4px 8px",
+                      marginTop: "8px",
+                      width: "100%",
+                      textAlign: "center"
+                    }}
+                  >
+                    {expandedMemory.habit ? "Show less habits" : `Show all ${items.length} habits`}
+                  </button>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -749,9 +1157,9 @@ color: "#c9d1d9",
             background: "rgba(15, 27, 53, 0.6)", padding: "12px 14px",
             borderRadius: 8, fontSize: 12, color: "#8b949e", lineHeight: 1.7
           }}>
-            <strong style={{ color: "#aaa" }}>Setup notes</strong><br/>
-            <strong>WhatsApp:</strong> Text "join your-keyword" to +1 415 523 8886 once from your phone. Your keyword is in Twilio Console → Messaging → Try it out → WhatsApp.<br/>
-            <strong>Email:</strong> Sign up free at resend.com, create an API key, paste it in .env as RESEND_API_KEY.<br/>
+            <strong style={{ color: "#aaa" }}>Setup notes</strong><br />
+            <strong>WhatsApp:</strong> Text "join your-keyword" to +1 415 523 8886 once from your phone. Your keyword is in Twilio Console → Messaging → Try it out → WhatsApp.<br />
+            <strong>Email:</strong> Sign up free at resend.com, create an API key, paste it in .env as RESEND_API_KEY.<br />
             You can also configure via chat: <em>"notify me on WhatsApp at +91XXXXXXXXXX"</em>
           </div>
         </div>
@@ -761,22 +1169,97 @@ color: "#c9d1d9",
         {/* Left: Chat interface */}
         <div style={{ width: "340px", display: "flex", flexDirection: "column", gap: "20px" }}>
           <div style={{ flex: 1, background: "rgba(13, 17, 23, 0.3)", border: "1px solid rgba(48, 54, 61, 0.5)", borderRadius: "12px", display: "flex", flexDirection: "column", overflow: "hidden" }}>
-             <div style={{ padding: "12px 16px", background: "rgba(255,255,255,0.02)", borderBottom: "1px solid rgba(48, 54, 61, 0.5)", fontSize: "10px", fontWeight: 700, color: "#484f58", letterSpacing: "1px" }}>CHAT INTERFACE</div>
-             <div style={{ flex: 1, overflowY: "auto", padding: "20px" }} ref={chatRef}>
-               {messages.map((m, i) => <Bubble key={i} role={m.role} text={m.text} selectedVoice={selectedVoice} />)}
-               {loading && (
-  <div style={{ display: "flex", marginBottom: "16px" }}>
-    <div style={{ background: "rgba(22,27,34,0.6)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "12px", padding: "12px 16px", display: "flex", gap: "5px", alignItems: "center" }}>
-      {[0, 0.2, 0.4].map((delay, i) => (
-        <div key={i} style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#8b949e", animation: "dots 1.2s ease-in-out infinite", animationDelay: `${delay}s` }} />
-      ))}
-    </div>
-  </div>
-)}
-             </div>
-             <div style={{ padding: "16px", borderTop: "1px solid rgba(48, 54, 61, 0.5)", background: "rgba(0,0,0,0.2)" }}>
-               <div style={{ display: "flex", gap: "10px" }}>
-  
+            <div style={{ padding: "12px 16px", background: "rgba(255,255,255,0.02)", borderBottom: "1px solid rgba(48, 54, 61, 0.5)", fontSize: "10px", fontWeight: 700, color: "#484f58", letterSpacing: "1px" }}>CHAT INTERFACE</div>
+            <div style={{ flex: 1, overflowY: "auto", padding: "20px" }} ref={chatRef}>
+              {messages.map((m, i) => <Bubble key={i} role={m.role} text={m.text} selectedVoice={selectedVoice} />)}
+              {loading && (
+                <div style={{ display: "flex", marginBottom: "16px" }}>
+                  <div style={{ background: "rgba(22,27,34,0.6)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "12px", padding: "12px 16px", display: "flex", gap: "5px", alignItems: "center" }}>
+                    {[0, 0.2, 0.4].map((delay, i) => (
+                      <div key={i} style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#8b949e", animation: "dots 1.2s ease-in-out infinite", animationDelay: `${delay}s` }} />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            {/* Smart Suggestion Chip */}
+            {suggestionChip && (
+              <div style={{ 
+                padding: "12px 16px", 
+                borderTop: "1px solid rgba(48, 54, 61, 0.3)",
+                background: "rgba(59, 130, 246, 0.05)"
+              }}>
+                <div style={{ 
+                  display: "flex", 
+                  alignItems: "center", 
+                  justifyContent: "space-between",
+                  background: "rgba(59, 130, 246, 0.1)",
+                  border: "1px solid rgba(59, 130, 246, 0.3)",
+                  borderRadius: "12px",
+                  padding: "12px 16px"
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    <span style={{ fontSize: "20px" }}>💡</span>
+                    <span style={{ fontSize: "13px", color: "#c9d1d9" }}>{suggestionChip.message}</span>
+                  </div>
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    <button
+                      onClick={async () => {
+                        const reminderMsg = `Remind me to ${suggestionChip.activity} at ${suggestionChip.time_hint}`;
+                        setInput(reminderMsg);
+                        setSuggestionChip(null);
+                        // Auto send after a brief delay
+                        setTimeout(async () => {
+                          try {
+                            const r = await fetch(`${API}/chat`, {
+                              method: "POST",
+                              headers: { 
+                                "Content-Type": "application/json",
+                                "X-User-ID": userId 
+                              },
+                              body: JSON.stringify({ message: reminderMsg })
+                            });
+                            const data = await r.json();
+                            setMessages(prev => [...prev, { role: "assistant", text: data.reply }]);
+                            if (data.system?.reminder_id) fetchReminders();
+                          } catch {}
+                        }, 100);
+                      }}
+                      style={{
+                        background: "#3b82f6",
+                        color: "#fff",
+                        border: "none",
+                        borderRadius: "8px",
+                        padding: "8px 14px",
+                        fontSize: "12px",
+                        fontWeight: 600,
+                        cursor: "pointer"
+                      }}
+                    >
+                      Yes, set reminder
+                    </button>
+                    <button
+                      onClick={() => setSuggestionChip(null)}
+                      style={{
+                        background: "transparent",
+                        color: "#8b949e",
+                        border: "1px solid rgba(255,255,255,0.1)",
+                        borderRadius: "8px",
+                        padding: "8px 12px",
+                        fontSize: "12px",
+                        cursor: "pointer"
+                      }}
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            <div style={{ padding: "16px", borderTop: "1px solid rgba(48, 54, 61, 0.5)", background: "rgba(0,0,0,0.2)" }}>
+              <div style={{ display: "flex", gap: "10px" }}>
   <input
     value={input}
     onChange={e => setInput(e.target.value)}
@@ -794,64 +1277,83 @@ color: "#c9d1d9",
     }}
   />
 
-  {/* 🎤 MIC BUTTON */}
- {/* 🎤 MIC BUTTON */}
-<div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px" }}>
-  {voiceStatus === "speaking" && (
-    <div style={{ display: "flex", alignItems: "center", gap: "3px", height: "24px" }}>
-      {[
-        { anim: "wave1 0.6s ease-in-out infinite" },
-        { anim: "wave2 0.6s ease-in-out infinite 0.1s" },
-        { anim: "wave3 0.6s ease-in-out infinite 0.2s" },
-        { anim: "wave4 0.6s ease-in-out infinite 0.3s" },
-        { anim: "wave1 0.6s ease-in-out infinite 0.15s" },
-      ].map((w, i) => (
-        <div key={i} style={{ width: "3px", borderRadius: "2px", background: "#3b82f6", animation: w.anim }} />
-      ))}
-    </div>
-  )}
-  <button
-    onClick={() => {
-      window.speechSynthesis.cancel();
-      setVoiceStatus("idle");
-      try { recognitionRef.current?.start(); } catch {}
-    }}
-    style={{
-      background: listening ? "#ef4444" : voiceStatus === "processing" ? "#f59e0b" : "#10b981",
-      color: "#fff", border: "none", borderRadius: "50%",
-      width: "40px", height: "40px", fontSize: "16px", cursor: "pointer",
-      animation: listening ? "micPulse 1.2s infinite" : "none",
-      transition: "background 0.3s"
-    }}
-  >
-    {voiceStatus === "processing" ? "⏳" : "🎤"}
-  </button>
-  <span style={{
-    fontSize: "8px", fontWeight: 700, letterSpacing: "0.5px",
-    color: voiceStatus === "listening" ? "#10b981" : voiceStatus === "processing" ? "#f59e0b" : voiceStatus === "speaking" ? "#3b82f6" : "#484f58",
-    textTransform: "uppercase"
-  }}>{voiceStatus}</span>
-</div>
-<button
-    onClick={send}
-    style={{
-      background: "#2563eb",
-      color: "#fff",
-      border: "none",
-      borderRadius: "8px",
-      padding: "0 16px",
-      fontWeight: 600,
-      fontSize: "13px",
-      cursor: "pointer"
-    }}
-  >
-    Send →
-  </button>
+                <input
+                  value={input}
+                  onChange={e => setInput(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && send()}
+                  placeholder='"I love coffee" or "Remind me..."'
+                  style={{
+                    flex: 1,
+                    background: "rgba(255,255,255,0.02)",
+                    border: "1px solid #30363d",
+                    borderRadius: "8px",
+                    padding: "10px 14px",
+                    color: "#fff",
+                    fontSize: "13px",
+                    outline: "none"
+                  }}
+                />
 
-</div>
-             </div>
+                {/* 🎤 MIC BUTTON */}
+                {/* 🎤 MIC BUTTON */}
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px" }}>
+                  {voiceStatus === "speaking" && (
+                    <div style={{ display: "flex", alignItems: "center", gap: "3px", height: "24px" }}>
+                      {[
+                        { anim: "wave1 0.6s ease-in-out infinite" },
+                        { anim: "wave2 0.6s ease-in-out infinite 0.1s" },
+                        { anim: "wave3 0.6s ease-in-out infinite 0.2s" },
+                        { anim: "wave4 0.6s ease-in-out infinite 0.3s" },
+                        { anim: "wave1 0.6s ease-in-out infinite 0.15s" },
+                      ].map((w, i) => (
+                        <div key={i} style={{ width: "3px", borderRadius: "2px", background: "#3b82f6", animation: w.anim }} />
+                      ))}
+                    </div>
+                  )}
+                  <button
+                    disabled={isOffline}
+                    onClick={() => {
+                      window.speechSynthesis.cancel();
+                      setVoiceStatus("idle");
+                      try { recognitionRef.current?.start(); } catch { }
+                    }}
+                    style={{
+                      background: isOffline ? "#484f58" : listening ? "#ef4444" : voiceStatus === "processing" ? "#f59e0b" : "#10b981",
+                      color: "#fff", border: "none", borderRadius: "50%",
+                      width: "40px", height: "40px", fontSize: "16px", cursor: isOffline ? "not-allowed" : "pointer",
+                      animation: listening ? "micPulse 1.2s infinite" : "none",
+                      transition: "background 0.3s",
+                      opacity: isOffline ? 0.5 : 1
+                    }}
+                  >
+                    {voiceStatus === "processing" ? "⏳" : "🎤"}
+                  </button>
+                  <span style={{
+                    fontSize: "8px", fontWeight: 700, letterSpacing: "0.5px",
+                    color: voiceStatus === "listening" ? "#10b981" : voiceStatus === "processing" ? "#f59e0b" : voiceStatus === "speaking" ? "#3b82f6" : "#484f58",
+                    textTransform: "uppercase"
+                  }}>{voiceStatus}</span>
+                </div>
+                <button
+                  onClick={send}
+                  style={{
+                    background: "#2563eb",
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: "8px",
+                    padding: "0 16px",
+                    fontWeight: 600,
+                    fontSize: "13px",
+                    cursor: "pointer"
+                  }}
+                >
+                  Send →
+                </button>
+
+              </div>
+            </div>
           </div>
-          
+
 
           {/* Stats Boxes from screenshot */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "10px" }}>
@@ -877,7 +1379,7 @@ color: "#c9d1d9",
             </div>
             <div style={{ display: "flex", gap: "6px", background: "#0d1117", padding: "3px", borderRadius: "6px" }}>
               {["all", "pending", "fired", "cancelled"].map(f => (
-                <button 
+                <button
                   key={f} onClick={() => setFilter(f)}
                   style={{ background: filter === f ? "#21262d" : "transparent", border: "none", color: filter === f ? "#fff" : "#8b949e", fontSize: "10px", fontWeight: 700, padding: "5px 12px", borderRadius: "4px", cursor: "pointer", textTransform: "uppercase" }}
                 >

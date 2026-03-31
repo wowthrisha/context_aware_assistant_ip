@@ -4,3 +4,8 @@ __pycache__/
 *.sqlite3
 memory_db/
 .env
+data/*.db
+*.log
+dev-dist/
+lint.txt*.db
+*.log

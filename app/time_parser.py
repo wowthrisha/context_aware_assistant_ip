@@ -71,10 +71,19 @@ def _apply_day_offset(now: datetime, h: int, m: int, text: str) -> datetime:
     has_tomorrow = bool(re.search(r'\btomorrow\b', text))
     has_today    = bool(re.search(r'\btoday\b|\btonight\b', text))
     t = now.replace(hour=h, minute=m, second=0, microsecond=0)
+    
+    # Grace-window policy for offline synchronization
+    grace_window = timedelta(minutes=15)
+    
     if has_tomorrow:
         t += timedelta(days=1)
     elif t <= now and not has_today:
-        t += timedelta(days=1)
+        # If the specified absolute time just barely passed (within grace_window),
+        # assume it was queued offline and sync'd slightly late. DO NOT push to tomorrow.
+        if (now - t) <= grace_window:
+            pass
+        else:
+            t += timedelta(days=1)
     return t
 
 
