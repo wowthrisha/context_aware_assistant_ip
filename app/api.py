@@ -36,7 +36,11 @@ app = FastAPI(title="Context-Aware Assistant API", version="5.0", lifespan=lifes
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
+    ],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -106,7 +110,11 @@ def cancel_reminder(reminder_id: str, user_id: str = Depends(get_current_user)):
 
 
 @app.get("/reminders/stream")
-async def stream_reminders(request: Request, user_id: str):
+async def stream_reminders(
+    request: Request,
+    user_id: str = Depends(get_current_user),
+):
+    user_id = user_id.lower()
     q = await sse_manager.connect(user_id)
 
     async def event_generator():

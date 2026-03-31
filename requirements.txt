@@ -1,11 +1,25 @@
+# ── Core backend ──────────────────────────────────────────────
 anthropic
 fastapi
 uvicorn[standard]
 apscheduler
-chromadb
-sentence-transformers
+sqlalchemy
 python-dotenv
 pydantic
-sqlalchemy
-twilio
-resend
+
+# ── Database / storage ─────────────────────────────────────────
+chromadb
+
+# ── ML — NLP & embeddings ──────────────────────────────────────
+sentence-transformers          # embeddings (all-MiniLM-L6-v2) + CrossEncoder
+transformers                   # sentiment pipeline (DistilBERT) + BART intent
+torch                          # backend for transformers
+scikit-learn                   # DBSCAN habit clustering
+
+# ── ML — Named Entity Recognition ─────────────────────────────
+spacy                          # NER for time parsing
+# After install run:  python -m spacy download en_core_web_sm
+
+# ── Notifications ──────────────────────────────────────────────
+twilio                         # WhatsApp alerts
+resend                         # Email alerts

@@ -7,4 +7,5 @@ memory_db/
 data/*.db
 *.log
 dev-dist/
-lint.txt
+lint.txt
+*.db

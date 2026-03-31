@@ -20,6 +20,8 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from apscheduler.executors.pool import ThreadPoolExecutor
 from apscheduler.events import EVENT_JOB_EXECUTED, EVENT_JOB_ERROR
+from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 
 from .database import (
     init_db,
@@ -29,10 +31,11 @@ from .database import (
     get_all_reminders_db,
     get_pending_reminders_db,
     get_notification_prefs,
+    get_reminder_by_id,
 )
 from .notifier import dispatch_notifications
 
-from .time_parser import parse_time, extract_task
+from .time_parser import parse_time, extract_task, detect_recurrence
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +75,44 @@ def _reminder_callback(reminder_id: str, message: str, user_id: str):
         "trigger_at": datetime.utcnow().isoformat()
     }
     sse_manager.emit(user_id, payload)
+
+    # Check if this is a recurring reminder and reschedule if needed
+    try:
+        reminder = get_reminder_by_id(reminder_id)
+        if reminder and reminder.get("recurrence"):
+            # For recurring reminders, create next occurrence
+            recurrence = reminder.get("recurrence")
+            now = datetime.now()
+            
+            # Calculate next trigger time based on recurrence type
+            if recurrence.startswith("daily"):
+                next_trigger = now + timedelta(days=1)
+            elif recurrence.startswith("weekly"):
+                next_trigger = now + timedelta(weeks=1)
+            elif recurrence == "interval_minutes":
+                # Extract interval from job trigger if possible, default to 30
+                next_trigger = now + timedelta(minutes=30)
+            elif recurrence == "interval_hours" or recurrence == "hourly":
+                next_trigger = now + timedelta(hours=1)
+            else:
+                next_trigger = now + timedelta(days=1)
+            
+            # Create new reminder for next occurrence
+            new_reminder_id = str(uuid.uuid4())
+            save_reminder(new_reminder_id, user_id, message, next_trigger, recurrence)
+            
+            # Schedule the next occurrence
+            _scheduler.add_job(
+                _reminder_callback,
+                trigger="date",
+                run_date=next_trigger,
+                args=[new_reminder_id, message, user_id],
+                id=new_reminder_id,
+                replace_existing=True,
+            )
+            logger.info("🔄 Recurring reminder rescheduled: %s → %s", reminder_id, new_reminder_id)
+    except Exception as e:
+        logger.error("Error rescheduling recurring reminder: %s", e)
 
     # Dispatch WhatsApp / Email notifications (non-fatal)
     try:
@@ -178,30 +219,88 @@ class ActionRouter:
             }
 
         clean_msg = extract_task(message)
+        
+        # Detect recurrence pattern
+        recurrence = detect_recurrence(message)
+        recurrence_str = recurrence["type"] if recurrence else None
 
         reminder_id = str(uuid.uuid4())
 
-        save_reminder(reminder_id, user_id, clean_msg, trigger_at)
+        save_reminder(reminder_id, user_id, clean_msg, trigger_at, recurrence_str)
 
-        _scheduler.add_job(
-            _reminder_callback,
-            trigger="date",
-            run_date=trigger_at,
-            args=[reminder_id, clean_msg, user_id],
-            id=reminder_id,
-            replace_existing=True,
-        )
+        # Build appropriate trigger based on recurrence
+        if recurrence:
+            rec_type = recurrence["type"]
+            hour = trigger_at.hour
+            minute = trigger_at.minute
+            
+            if rec_type.startswith("daily"):
+                # Daily at specific time
+                trigger = CronTrigger(hour=hour, minute=minute)
+            elif rec_type.startswith("weekly"):
+                if rec_type == "weekly_monday":
+                    trigger = CronTrigger(day_of_week="mon", hour=hour, minute=minute)
+                elif rec_type == "weekly_tuesday":
+                    trigger = CronTrigger(day_of_week="tue", hour=hour, minute=minute)
+                elif rec_type == "weekly_wednesday":
+                    trigger = CronTrigger(day_of_week="wed", hour=hour, minute=minute)
+                elif rec_type == "weekly_thursday":
+                    trigger = CronTrigger(day_of_week="thu", hour=hour, minute=minute)
+                elif rec_type == "weekly_friday":
+                    trigger = CronTrigger(day_of_week="fri", hour=hour, minute=minute)
+                elif rec_type == "weekly_saturday":
+                    trigger = CronTrigger(day_of_week="sat", hour=hour, minute=minute)
+                elif rec_type == "weekly_sunday":
+                    trigger = CronTrigger(day_of_week="sun", hour=hour, minute=minute)
+                else:
+                    # Generic weekly
+                    trigger = CronTrigger(day_of_week="*", hour=hour, minute=minute)
+            elif rec_type == "interval_minutes" and recurrence.get("interval"):
+                trigger = IntervalTrigger(minutes=recurrence["interval"])
+            elif rec_type == "interval_hours" and recurrence.get("interval"):
+                trigger = IntervalTrigger(hours=recurrence["interval"])
+            elif rec_type == "hourly":
+                trigger = IntervalTrigger(hours=1)
+            else:
+                # Default to daily if unrecognized
+                trigger = CronTrigger(hour=hour, minute=minute)
+            
+            _scheduler.add_job(
+                _reminder_callback,
+                trigger=trigger,
+                args=[reminder_id, clean_msg, user_id],
+                id=reminder_id,
+                replace_existing=True,
+            )
+            rec_label = rec_type.replace("_", " ")
+            friendly = f"{hour}:{minute:02d}"
+            return {
+                "reply": f"✅ Recurring reminder set ({rec_label}) at {friendly}: \"{clean_msg}\"",
+                "reminder_id": reminder_id,
+                "trigger_at": trigger_at.isoformat(),
+                "recurrence": rec_type,
+            }
+        else:
+            # One-time reminder (original behavior)
+            _scheduler.add_job(
+                _reminder_callback,
+                trigger="date",
+                run_date=trigger_at,
+                args=[reminder_id, clean_msg, user_id],
+                id=reminder_id,
+                replace_existing=True,
+            )
 
-        try:
-            friendly = trigger_at.strftime("%-I:%M %p")
-        except ValueError:
-            friendly = trigger_at.strftime("%I:%M %p").lstrip("0")
+            try:
+                friendly = trigger_at.strftime("%-I:%M %p")
+            except ValueError:
+                friendly = trigger_at.strftime("%I:%M %p").lstrip("0")
 
-        return {
-            "reply": f"✅ Reminder set for {friendly}: \"{clean_msg}\"",
-            "reminder_id": reminder_id,
-            "trigger_at": trigger_at.isoformat(),
-        }
+            return {
+                "reply": f"✅ Reminder set for {friendly}: \"{clean_msg}\"",
+                "reminder_id": reminder_id,
+                "trigger_at": trigger_at.isoformat(),
+            }
 
     # ── Cancel latest reminder ───────────────────────────────────────────────
 

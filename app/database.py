@@ -33,6 +33,7 @@ def init_db() -> None:
             message TEXT NOT NULL,
             trigger_at TEXT NOT NULL,
             status TEXT NOT NULL DEFAULT 'pending',
+            recurrence TEXT,
             created_at TEXT NOT NULL,
             fired_at TEXT,
             cancelled_at TEXT
@@ -98,18 +99,19 @@ def get_notification_prefs(user_id: str) -> dict:
 
 # ── CREATE ─────────────────────────────────────
 
-def save_reminder(reminder_id: str, user_id: str, message: str, trigger_at: datetime):
+def save_reminder(reminder_id: str, user_id: str, message: str, trigger_at: datetime, recurrence: Optional[str] = None):
     conn = _conn()
     try:
         conn.execute(
             """INSERT OR REPLACE INTO reminders
-            (id, user_id, message, trigger_at, status, created_at)
-            VALUES (?, ?, ?, ?, 'pending', ?)""",
+            (id, user_id, message, trigger_at, recurrence, status, created_at)
+            VALUES (?, ?, ?, ?, ?, 'pending', ?)""",
             (
                 reminder_id,
                 user_id,
                 message,
                 trigger_at.isoformat(),
+                recurrence,
                 datetime.utcnow().isoformat(),
             ),
         )
